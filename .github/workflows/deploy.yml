@@ -33,7 +33,7 @@ jobs:
       - name: Build website
         run: npm run build
         env:
-          VITE_SUPABASE_URL: "${{vars.VIT_SUPABASE_URL }}"
+          VITE_SUPABASE_URL: "${{vars.VITE_SUPABASE_URL }}"
           VITE_SUPABASE_ANON_KEY: "${{vars.VITE_SUPABASE_ANON_KEY }}"
           
         - name: Upload Pages artifact
