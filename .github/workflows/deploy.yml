@@ -39,16 +39,16 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3 
         with: 
-            path: dist
+          path: dist
 
-deploy:
-  needs: build
-  runs-on: ubuntu-latest
-  permissions:
-    pages: write
-    id-token: write
-  environment:
-    name: github-pages
-  steps: 
-    - name: Deploy to Github PAges
-      uses: actions/deploy-pages@v4
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps: 
+      - name: Deploy to Github PAges
+        uses: actions/deploy-pages@v4
