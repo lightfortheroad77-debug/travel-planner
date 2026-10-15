@@ -102,3 +102,5 @@ Vite uses relative asset paths, so the app can be deployed under the `/REPO/` pa
 ## Validation note
 
 The repository's JSX/JavaScript files were **syntax-parsed successfully** with the locally installed TypeScript parser. This container cannot reach npmjs.org, so `npm install` and the real `npm run build` could not be completed here. Run those commands in an internet-connected environment and resolve any build or runtime issues before deploying. The included files are implementation source, not a hosted deployment.
+
+# deployment check
