@@ -94,7 +94,7 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
       ...blankActivity,
       title: title.trim(),
       day_number: isIdea ? null : n,
-      start_time: isIdea ? null : time,
+      start_time: time,
       notes,
       city_area: city,
       place
@@ -110,11 +110,9 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
     <div className="inline-editor stack">
       <h4>{isIdea ? 'Add idea' : `Quick Add · Day ${n}`}</h4>
       
-      {!isIdea && (
-        <Field label="Start time (optional)">
-          <TimeEntry value={time} onChange={setTime} />
-        </Field>
-      )}
+      <Field label="Start time (optional)">
+        <TimeEntry value={time} onChange={setTime} />
+      </Field>
 
       <Field label="Activity name">
         <input autoFocus={isIdea} value={title} onChange={e => setTitle(e.target.value)} placeholder="Place or activity" />
@@ -161,7 +159,7 @@ function ActivityEditor({ ctx, activity, onClose }) {
     const ok = await save('activities', {
       title: v.title.trim(),
       day_number: v.day_number === 'ideas' ? null : Number(v.day_number),
-      start_time: v.day_number === 'ideas' ? null : v.start_time,
+      start_time: v.start_time,
       city_area: v.city_area || '',
       kind: v.kind,
       place: v.place || '',
@@ -200,11 +198,9 @@ function ActivityEditor({ ctx, activity, onClose }) {
         <Field label="Assigned Day">
           <Select value={v.day_number === null ? 'ideas' : String(v.day_number)} onChange={x => update('day_number', x)} options={dayOptions} />
         </Field>
-        {v.day_number !== 'ideas' && v.day_number !== null && (
-          <Field label="Start time">
-            <TimeEntry value={v.start_time} onChange={x => update('start_time', x)} />
-          </Field>
-        )}
+        <Field label="Start time (optional)">
+          <TimeEntry value={v.start_time} onChange={x => update('start_time', x)} />
+        </Field>
       </div>
 
       <div className="form-grid">
@@ -416,7 +412,7 @@ export function EventCard({ ctx, event }) {
   const [editor, setEditor] = useState(false);
 
   async function sendIdea() {
-    await save('activities', { day_number: null, start_time: null }, event.id);
+    await save('activities', { day_number: null }, event.id);
   }
 
   async function duplicate() {
@@ -589,20 +585,22 @@ export function Ideas(ctx) {
         {filtered.map(a => (
           <article key={a.id} className="card stack compact">
             <div className="row between align-start">
-              <div>
-                <strong>{a.title}</strong>
+              <button className="event-name-area" onClick={() => setEditor(p => p === a.id ? null : a.id)} title="Tap to edit idea">
+                <div className="row compact">
+                  {clock(a.start_time) !== 'TBD' && <span className="muted tiny strong">{clock(a.start_time)} ·</span>}
+                  <strong>{a.title}</strong>
+                </div>
                 {a.city_area && <div><span className="tag">{a.city_area}</span></div>}
-              </div>
+              </button>
               <div className="row">
                 <MapButton activity={a} />
                 <ActionMenu items={[
-                  { label: 'Edit', icon: <Pencil size={15} />, onClick: () => setEditor(a.id) },
-                  { label: 'Delete', icon: <Trash2 size={15} />, danger: true, onClick: () => { if (window.confirm(`Delete ${a.title}?`)) remove('activities', a); } }
+                  { label: 'Delete', icon: <Trash2 size={15} />, danger: true, onClick: () => { if (window.confirm(`Delete "${a.title}"?`)) remove('activities', a); } }
                 ]} />
               </div>
             </div>
             <Status activity={a} />
-            {a.notes && <p className="muted clamp small">{a.notes}</p>}
+            {a.notes && <p className="muted small">{a.notes}</p>}
             {editor === a.id && <ActivityEditor key={a.id} ctx={ctx} activity={a} onClose={() => setEditor(null)} />}
             {planning === a.id ? (
               <div className="inline-editor stack">
@@ -621,7 +619,7 @@ export function Ideas(ctx) {
                 <Btn onClick={() => {
                   setPlanning(a.id);
                   setDest(Math.min(dayCount(trip), a.city_area?.toLowerCase().includes('kyoto') ? 8 : a.city_area?.toLowerCase().includes('osaka') ? 12 : 1));
-                  setTime(null);
+                  setTime(clock(a.start_time) === 'TBD' ? null : clock(a.start_time));
                 }}>
                   <CalendarPlus size={15} /> Plan day
                 </Btn>
