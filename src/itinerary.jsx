@@ -212,7 +212,6 @@ function ActivityEditor({ ctx, activity, onClose }) {
 export function Overview(ctx) {
   const { trip, data, focused, setFocused, goDay, refresh, toast } = ctx;
   const [expanded, setExpanded] = useState({});
-  const [showMore, setShowMore] = useState({});
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(null);
   const [palette, setPalette] = useState(null);
@@ -227,11 +226,6 @@ export function Overview(ctx) {
     if (last && last.name === base) last.days.push(d);
     else groups.push({ key: `${base}-${d.n}`, name: base, days: [d] });
   }
-
-  useEffect(() => {
-    const item = document.getElementById(`overview-day-${focused}`);
-    if (item) item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [focused]);
 
   async function setColor(n, color) {
     const old = data.trip_days.find(d => d.day_number === n);
@@ -249,16 +243,11 @@ export function Overview(ctx) {
     setPalette(null);
   }
 
-  const scrollToDay = (n) => {
-    setFocused(n);
-    setExpanded(p => ({ ...p, [n]: true }));
-  };
-
   return (
     <div className="stack spacious">
       <SectionTitle title="Trip overview" sub="Overnight cities · Tap a day title to open its itinerary" />
 
-      {/* Horizontal Quick Day Jumper Bar */}
+      {/* Horizontal Day Jumper Bar: Clicking any pill navigates to that day page */}
       <div className="day-jumper-bar" role="navigation" aria-label="Day quick jump">
         {days.map(d => {
           const isToday = today === d.n;
@@ -267,7 +256,7 @@ export function Overview(ctx) {
             <button
               key={d.n}
               className={`day-pill ${isFocused ? 'active' : ''} ${isToday ? 'today-pill' : ''}`}
-              onClick={() => scrollToDay(d.n)}
+              onClick={() => goDay(d.n)}
             >
               Day {d.n}
               {isToday && <span className="pill-dot" title="Today" />}
@@ -275,7 +264,7 @@ export function Overview(ctx) {
           );
         })}
         {today && (
-          <Btn onClick={() => scrollToDay(today)}>
+          <Btn onClick={() => goDay(today)}>
             <LocateFixed size={15} /> Today
           </Btn>
         )}
@@ -294,13 +283,10 @@ export function Overview(ctx) {
               const meta = data.trip_days.find(x => x.day_number === n);
               const list = activityList(data, n);
 
-              // Past days default to collapsed unless tapped; current and future days default to expanded
+              // Past days start collapsed; Today and future days start fully expanded
               const isPast = today ? n < today : false;
               const isCardExpanded = expanded[n] ?? !isPast;
 
-              // Items truncation logic inside expanded card
-              const isShowingMore = showMore[n] ?? false;
-              const shown = list.filter((e, i) => isShowingMore || i < 3 || e.action_needed || e.reservation_status === 'to_reserve');
               const areas = [...new Set(list.map(a => a.city_area).filter(c => c && c.toLowerCase() !== group.name.toLowerCase()))];
 
               return (
@@ -356,8 +342,9 @@ export function Overview(ctx) {
 
                       {editing === n && <TitleTimeEditor n={n} ctx={ctx} onClose={() => setEditing(null)} />}
 
+                      {/* Display ALL activities fully expanded */}
                       <div className="overview-events">
-                        {shown.map(e => (
+                        {list.map(e => (
                           <div className="overview-event" key={e.id}>
                             <span className="event-time">{clock(e.start_time)}</span>
                             <div className="event-text">
@@ -369,14 +356,6 @@ export function Overview(ctx) {
                         ))}
                         {list.length === 0 && <span className="muted tiny">No activities yet</span>}
                       </div>
-
-                      {list.length > 3 && (
-                        <div className="day-bottom">
-                          <button className="text-button" onClick={() => setShowMore(p => ({ ...p, [n]: !isShowingMore }))}>
-                            {isShowingMore ? 'Show less' : `Show all ${list.length}`} {isShowingMore ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                          </button>
-                        </div>
-                      )}
 
                       {adding === n && <QuickAdd n={n} ctx={ctx} onClose={() => setAdding(null)} />}
                     </>
@@ -625,7 +604,7 @@ export function Ideas(ctx) {
         ))}
         {filtered.length === 0 && <Empty text="No matching ideas. Add a place or change the filter." />}
       </div>
-      <datalist id="known-cities">{cities.map(c => <option key={c} value={c} />)}</datalist>
+      <datalist id="known-cities">{cities.map(c => <option key={c} value={c}/>)}</datalist>
     </div>
   );
 }
