@@ -141,8 +141,12 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
 }
 
 function ActivityEditor({ ctx, activity, onClose }) {
-  const { save, toast } = ctx;
-  const [v, setV] = useState({ ...blankActivity, ...activity, start_time: activity.start_time ? clock(activity.start_time) : null });
+  const { save, toast, trip } = ctx;
+  const [v, setV] = useState({ 
+    ...blankActivity, 
+    ...activity, 
+    start_time: activity.start_time ? clock(activity.start_time) : null 
+  });
   const [saving, setSaving] = useState(false);
   const update = (k, value) => setV(p => ({ ...p, [k]: value }));
 
@@ -151,8 +155,8 @@ function ActivityEditor({ ctx, activity, onClose }) {
     setSaving(true);
     const ok = await save('activities', {
       title: v.title.trim(),
-      day_number: v.day_number,
-      start_time: v.start_time,
+      day_number: v.day_number === 'ideas' ? null : Number(v.day_number),
+      start_time: v.day_number === 'ideas' ? null : v.start_time,
       city_area: v.city_area || '',
       kind: v.kind,
       place: v.place || '',
@@ -166,21 +170,32 @@ function ActivityEditor({ ctx, activity, onClose }) {
     setSaving(false);
     if (ok) {
       onClose();
-      toast('Activity updated everywhere.');
+      toast('Activity updated.');
     }
   }
 
+  const dayOptions = [
+    { value: 'ideas', label: 'Unscheduled (Ideas Inbox)' },
+    ...tripDays(trip).map(d => ({ value: String(d.n), label: `Day ${d.n} · ${dayTitle(ctx.data, d.n)}` }))
+  ];
+
   return (
     <div className="inline-editor stack">
-      <h4>Edit {activity.day_number === null ? 'idea' : 'activity'}</h4>
+      <h4>Edit activity</h4>
       <Field label="Name"><input value={v.title} onChange={e => update('title', e.target.value)} /></Field>
+      
       <div className="form-grid">
-        {activity.day_number !== null && (
+        <Field label="Assigned Day">
+          <Select value={v.day_number === null ? 'ideas' : String(v.day_number)} onChange={x => update('day_number', x)} options={dayOptions} />
+        </Field>
+        {v.day_number !== 'ideas' && v.day_number !== null && (
           <Field label="Start time"><TimeEntry value={v.start_time} onChange={x => update('start_time', x)} /></Field>
         )}
-        <Field label="Type"><Select value={v.kind} onChange={x => update('kind', x)} options={typeOptions} /></Field>
       </div>
+
+      <Field label="Type"><Select value={v.kind} onChange={x => update('kind', x)} options={typeOptions} /></Field>
       <Field label="City / Area"><input list="known-cities" value={v.city_area} onChange={e => update('city_area', e.target.value)} placeholder="Optional" /></Field>
+      
       {v.kind === 'transport' ? (
         <div className="form-grid">
           <Field label="From"><input value={v.origin} onChange={e => update('origin', e.target.value)} /></Field>
@@ -189,18 +204,23 @@ function ActivityEditor({ ctx, activity, onClose }) {
       ) : (
         <Field label="Place / address"><input value={v.place} onChange={e => update('place', e.target.value)} /></Field>
       )}
+
       <Field label="Google Maps URL (optional)" help="Exact pin or route overrides the automatically generated Maps link.">
         <input type="url" value={v.maps_url} onChange={e => update('maps_url', e.target.value)} placeholder="https://maps.app.goo.gl/..." />
       </Field>
+
       <Field label="Reservation status">
         <Select value={v.reservation_status} onChange={x => update('reservation_status', x)} options={reservationOptions} />
       </Field>
+
       <label className="check-row">
         <input type="checkbox" checked={v.action_needed} onChange={e => update('action_needed', e.target.checked)} /> Action needed
       </label>
-      <Field label="Notes (two-line preview in the timeline)">
+
+      <Field label="Notes">
         <textarea rows="3" value={v.notes} onChange={e => update('notes', e.target.value)} />
       </Field>
+
       <div className="row end">
         <Btn onClick={onClose}>Cancel</Btn>
         <Btn kind="primary" onClick={commit} disabled={saving || !v.title.trim() || v.start_time === false}>{saving ? 'Saving...' : 'Save changes'}</Btn>
@@ -247,7 +267,7 @@ export function Overview(ctx) {
     <div className="stack spacious">
       <SectionTitle title="Trip overview" sub="Overnight cities · Tap a day title to open its itinerary" />
 
-{/* Horizontal Day Jumper Bar */}
+      {/* Horizontal Card Day Jumper Bar */}
       <div className="day-jumper-bar" role="navigation" aria-label="Day quick jump">
         {days.map(d => {
           const isToday = today === d.n;
@@ -278,7 +298,6 @@ export function Overview(ctx) {
               const meta = data.trip_days.find(x => x.day_number === n);
               const list = activityList(data, n);
 
-              // Past days start collapsed; Today and future days start fully expanded
               const isPast = today ? n < today : false;
               const isCardExpanded = expanded[n] ?? !isPast;
 
@@ -291,7 +310,6 @@ export function Overview(ctx) {
                   className={`day-card ${toneColors[meta?.color || 'none']} ${focused === n ? 'focused' : ''} ${!isCardExpanded ? 'collapsed' : ''}`}
                 >
                   <div className="day-top">
-                    {/* Direct navigation to Day view on title click */}
                     <button className="day-title-button" onClick={() => goDay(n)}>
                       <span className="muted tiny">
                         Day {n} · {shortDate(d.date)}
@@ -337,7 +355,6 @@ export function Overview(ctx) {
 
                       {editing === n && <TitleTimeEditor n={n} ctx={ctx} onClose={() => setEditing(null)} />}
 
-                      {/* Display ALL activities fully expanded */}
                       <div className="overview-events">
                         {list.map(e => (
                           <div className="overview-event" key={e.id}>
@@ -372,28 +389,17 @@ export function Overview(ctx) {
 }
 
 export function EventCard({ ctx, event }) {
-  const { trip, data, save, remove, refresh, goDay, toast } = ctx;
-  const [expanded, setExpanded] = useState(false);
+  const { trip, save, remove, toast } = ctx;
   const [editor, setEditor] = useState(false);
-  const [transfer, setTransfer] = useState(null);
-  const [dest, setDest] = useState(event.day_number || 1);
-
-  const maps = mapHref(event);
 
   async function sendIdea() {
     await save('activities', { day_number: null, start_time: null }, event.id);
   }
 
-  async function moveOrCopy() {
-    if (transfer === 'move') {
-      if (event.reservation_status === 'reserved' && !window.confirm('This activity has a reservation. Check that the booking is valid for the new day. Continue?')) return;
-      const ok = await save('activities', { day_number: dest }, event.id);
-      if (ok) { setTransfer(null); toast(`Moved to Day ${dest}.`); }
-    } else {
-      const { id, created_at, trip_id, ...copy } = event;
-      const ok = await ctx.saveMany('activities', [{ ...copy, day_number: dest, reservation_status: event.reservation_status === 'reserved' ? 'none' : event.reservation_status }]);
-      if (ok) { setTransfer(null); toast(`Duplicated to Day ${dest}.`); }
-    }
+  async function duplicate() {
+    const { id, created_at, trip_id, ...copy } = event;
+    const ok = await ctx.saveMany('activities', [{ ...copy, reservation_status: event.reservation_status === 'reserved' ? 'none' : event.reservation_status }]);
+    if (ok) toast(`Duplicated "${event.title}".`);
   }
 
   async function del() {
@@ -404,42 +410,31 @@ export function EventCard({ ctx, event }) {
     <article className="event-card">
       <div className="event-main">
         <div className="event-time strong">{clock(event.start_time)}</div>
-        <button className="event-name-area" onClick={() => setExpanded(v => !v)}>
+        
+        {/* Tapping Title Opens Edit Mode Directly */}
+        <button className="event-name-area" onClick={() => setEditor(v => !v)} title="Tap to edit activity">
           <strong>{event.title}</strong>
           {event.city_area && <span className="muted tiny">{event.city_area}</span>}
           <Status activity={event} />
-          {event.notes && <span className={expanded ? 'event-notes' : 'event-notes clamp'}>{event.notes}</span>}
+          {event.notes && <span className="event-notes">{event.notes}</span>}
         </button>
+
         <div className="event-actions">
           <MapButton activity={event} />
           <ActionMenu items={[
-            { label: 'Edit details', icon: <Pencil size={15} />, onClick: () => { setEditor(true); setExpanded(true); } },
-            { label: 'Move to day', icon: <CalendarPlus size={15} />, onClick: () => { setTransfer('move'); setDest(Math.min(dayCount(trip), event.day_number + 1)); } },
-            { label: 'Duplicate', icon: <Copy size={15} />, onClick: () => { setTransfer('copy'); setDest(event.day_number); } },
+            { label: 'Edit details', icon: <Pencil size={15} />, onClick: () => setEditor(true) },
+            { label: 'Duplicate', icon: <Copy size={15} />, onClick: duplicate },
             { label: 'Send to Ideas', icon: <Lightbulb size={15} />, onClick: sendIdea },
             { label: 'Delete', icon: <Trash2 size={15} />, danger: true, onClick: del }
           ]} />
         </div>
       </div>
-      {expanded && event.kind === 'transport' && !editor && (
+
+      {event.kind === 'transport' && !editor && (
         <div className="event-route muted tiny">{event.origin || 'Origin TBD'} → {event.destination || 'Destination TBD'}</div>
       )}
+
       {editor && <ActivityEditor key={event.id} ctx={ctx} activity={event} onClose={() => setEditor(false)} />}
-      {transfer && (
-        <div className="inline-editor stack">
-          <h4>{transfer === 'move' ? 'Move activity' : 'Duplicate activity'}</h4>
-          <Field label="Destination day">
-            <Select value={String(dest)} onChange={v => setDest(Number(v))} options={tripDays(trip).map(d => ({ value: String(d.n), label: `Day ${d.n} · ${dayTitle(data, d.n)}` }))} />
-          </Field>
-          {event.reservation_status === 'reserved' && (
-            <small className="muted">{transfer === 'copy' ? 'The copy will not inherit Reserved.' : 'Check the original reservation date before moving.'}</small>
-          )}
-          <div className="row end">
-            <Btn onClick={() => setTransfer(null)}>Cancel</Btn>
-            <Btn kind="primary" disabled={transfer === 'move' && dest === event.day_number} onClick={moveOrCopy}>Confirm</Btn>
-          </div>
-        </div>
-      )}
     </article>
   );
 }
@@ -473,13 +468,22 @@ export function DayView(ctx) {
 
   return (
     <div className="stack spacious">
+      {/* Top Header Controls: Overview Back Button + Prev / Next Arrows */}
       <div className="row between">
-        <Btn onClick={() => setPage('overview')}><ArrowLeft size={16} /> Overview</Btn>
+        <Btn onClick={() => setPage('overview')}>
+          <ArrowLeft size={16} /> Overview
+        </Btn>
         <div className="row">
-          <Btn disabled={n === 1} onClick={() => setDay(n - 1)}><ChevronLeft size={17} /> Prev</Btn>
-          <Btn disabled={n === dayCount(trip)} onClick={() => setDay(n + 1)}>Next <ChevronRight size={17} /></Btn>
+          <Btn disabled={n === 1} onClick={() => setDay(n - 1)}>
+            <ChevronLeft size={17} /> Prev
+          </Btn>
+          <Btn disabled={n === dayCount(trip)} onClick={() => setDay(n + 1)}>
+            Next <ChevronRight size={17} />
+          </Btn>
         </div>
       </div>
+
+      {/* Horizontally Scrollable Day Strip */}
       <div className="day-strip">
         {days.map(d => (
           <button key={d.n} className={n === d.n ? 'active' : ''} onClick={() => setDay(d.n)}>
@@ -488,10 +492,12 @@ export function DayView(ctx) {
           </button>
         ))}
       </div>
+
       <div className="day-page-title">
         <span className="eyebrow">Day {n} · {shortDate(offsetDate(trip.start_date, n - 1))}</span>
         <h1>{dayTitle(data, n)}</h1>
       </div>
+
       {(current?.notes || editingNote) && (
         <div className="note-box">
           <div className="row between">
@@ -509,15 +515,19 @@ export function DayView(ctx) {
           ) : <p>{current?.notes}</p>}
         </div>
       )}
+
       <div className="section-title">
         <h2>Timeline</h2>
         <Btn kind="primary" onClick={() => setAdding(v => !v)}><Plus size={16} /> Add activity</Btn>
       </div>
+
       {adding && <QuickAdd n={n} ctx={ctx} onClose={() => setAdding(false)} />}
+
       <div className="stack compact">
         {list.map(e => <EventCard key={e.id} ctx={ctx} event={e} />)}
         {list.length === 0 && <Empty text="No activities planned yet. Add one above, or plan something from Ideas." />}
       </div>
+
       {!current?.notes && !editingNote && (
         <Btn className="subtle-action" onClick={() => { setEditingNote(true); setNote(''); }}>+ Add day notes</Btn>
       )}
