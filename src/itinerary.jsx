@@ -247,7 +247,7 @@ export function Overview(ctx) {
     <div className="stack spacious">
       <SectionTitle title="Trip overview" sub="Overnight cities · Tap a day title to open its itinerary" />
 
-      {/* Horizontal Day Jumper Bar: Clicking any pill navigates to that day page */}
+{/* Horizontal Day Jumper Bar */}
       <div className="day-jumper-bar" role="navigation" aria-label="Day quick jump">
         {days.map(d => {
           const isToday = today === d.n;
@@ -255,19 +255,14 @@ export function Overview(ctx) {
           return (
             <button
               key={d.n}
-              className={`day-pill ${isFocused ? 'active' : ''} ${isToday ? 'today-pill' : ''}`}
+              className={isFocused ? 'active' : ''}
               onClick={() => goDay(d.n)}
             >
-              Day {d.n}
-              {isToday && <span className="pill-dot" title="Today" />}
+              <strong>Day {d.n}</strong>
+              <span>{shortDate(d.date)}</span>
             </button>
           );
         })}
-        {today && (
-          <Btn onClick={() => goDay(today)}>
-            <LocateFixed size={15} /> Today
-          </Btn>
-        )}
       </div>
 
       {groups.map(group => (
