@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Users, FolderPlus, ChevronDown, ChevronUp, User, UserCheck } from 'lucide-react';
+import { Plus, Trash2, Users, FolderPlus, ChevronDown, ChevronUp, CheckCircle2, Circle, UserCheck } from 'lucide-react';
 import { Btn, Field, SectionTitle, Modal, Progress, Empty } from './ui.jsx';
 
 export function Packing(ctx) {
@@ -120,9 +120,9 @@ export function Packing(ctx) {
             type="button"
             onClick={() => setActiveTab('all')}
             style={{
-              padding: '8px 16px',
+              padding: '6px 14px',
               borderRadius: '20px',
-              fontSize: '0.84rem',
+              fontSize: '0.82rem',
               fontWeight: '600',
               border: activeTab === 'all' ? '1px solid #2e5b97' : '1px solid #dfe5ed',
               background: activeTab === 'all' ? '#eaf2fd' : '#ffffff',
@@ -138,9 +138,9 @@ export function Packing(ctx) {
               type="button"
               onClick={() => setActiveTab(t.id)}
               style={{
-                padding: '8px 16px',
+                padding: '6px 14px',
                 borderRadius: '20px',
-                fontSize: '0.84rem',
+                fontSize: '0.82rem',
                 fontWeight: '600',
                 border: activeTab === t.id ? '1px solid #2e5b97' : '1px solid #dfe5ed',
                 background: activeTab === t.id ? '#eaf2fd' : '#ffffff',
@@ -155,9 +155,9 @@ export function Packing(ctx) {
             type="button"
             onClick={() => setActiveTab('shared')}
             style={{
-              padding: '8px 16px',
+              padding: '6px 14px',
               borderRadius: '20px',
-              fontSize: '0.84rem',
+              fontSize: '0.82rem',
               fontWeight: '600',
               border: activeTab === 'shared' ? '1px solid #2e5b97' : '1px solid #dfe5ed',
               background: activeTab === 'shared' ? '#eaf2fd' : '#ffffff',
@@ -175,7 +175,7 @@ export function Packing(ctx) {
       </div>
 
       {/* Overall Progress */}
-      <div className="card stack compact">
+      <div className="card stack compact" style={{ padding: '12px 16px' }}>
         <div className="row between">
           <strong>Total Packing Progress</strong>
           <span className="muted tiny">{totalPacked} of {totalItems} packed</span>
@@ -184,7 +184,7 @@ export function Packing(ctx) {
       </div>
 
       {/* PERSON-CENTRIC CARDS */}
-      <div className="stack spacious">
+      <div className="stack" style={{ gap: '14px' }}>
         {displayPeople.map(person => {
           const personItems = data.packing_items.filter(i => i.owner_id === person.id);
           const personShared = data.packing_items.filter(i => !i.owner_id && i.responsible_id === person.id);
@@ -192,39 +192,39 @@ export function Packing(ctx) {
           const pTotal = personItems.length + personShared.length;
 
           return (
-            <article key={person.id} className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px' }}>
+            <article key={person.id} className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', padding: '14px 16px', gap: '10px' }}>
               {/* Person Card Header */}
-              <div className="row between align-center" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <div className="row between align-center" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
                 <div className="row align-center" style={{ gap: '8px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#eaf2fd', color: '#2e5b97', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#eaf2fd', color: '#2e5b97', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
                     {person.name.charAt(0)}
                   </div>
                   <div>
-                    <strong style={{ fontSize: '1.05rem' }}>{person.name}'s List</strong>
-                    <div className="muted tiny">{pPacked} of {pTotal} packed</div>
+                    <strong style={{ fontSize: '0.98rem' }}>{person.name}'s List</strong>
+                    <span className="muted tiny" style={{ marginLeft: '8px' }}>{pPacked}/{pTotal} packed</span>
                   </div>
                 </div>
-                <Btn kind="outline" style={{ fontSize: '0.78rem', padding: '4px 10px' }} onClick={() => openAddModal(person.id)}>
-                  <Plus size={14} /> Add for {person.name}
+                <Btn kind="ghost" style={{ fontSize: '0.78rem', color: '#2e5b97', padding: '2px 8px' }} onClick={() => openAddModal(person.id)}>
+                  <Plus size={14} /> Add
                 </Btn>
               </div>
 
               {/* Shared Responsibilities assigned to this person */}
               {personShared.length > 0 && (
-                <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }} className="stack compact">
-                  <span className="muted tiny strong" style={{ color: '#2e5b97' }}>⚡ Shared Items Assigned to {person.name}:</span>
+                <div style={{ background: '#f8fafc', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
+                  <div className="muted tiny strong" style={{ color: '#2e5b97', marginBottom: '4px' }}>⚡ Shared Items Assigned:</div>
                   {personShared.map(item => (
-                    <div key={item.id} className="pack-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                      <label className="check-with-content" style={{ flex: 1, cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={item.packed}
-                          onChange={e => save('packing_items', { packed: e.target.checked }, item.id)}
-                        />
-                        <span className={item.packed ? 'strike' : ''}>{item.name}</span>
-                      </label>
-                      <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item">
-                        <Trash2 size={15} style={{ color: '#94a3b8' }} />
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <button
+                        type="button"
+                        onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                      >
+                        {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
+                        <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</span>
+                      </button>
+                      <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
+                        <Trash2 size={14} style={{ color: '#94a3b8' }} />
                       </Btn>
                     </div>
                   ))}
@@ -237,27 +237,27 @@ export function Packing(ctx) {
                 if (cItems.length === 0) return null;
 
                 return (
-                  <div key={cat.id} className="stack compact" style={{ paddingTop: '6px' }}>
-                    <div className="row between align-center" style={{ borderBottom: '1px solid #f8fafc', paddingBottom: '4px' }}>
-                      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
-                      <span className="muted tiny">{cItems.filter(i => i.packed).length}/{cItems.length}</span>
+                  <div key={cat.id} style={{ marginBottom: '4px' }}>
+                    <div className="row between align-center" style={{ paddingBottom: '3px', borderBottom: '1px dashed #f1f5f9', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
+                      <span className="muted tiny" style={{ fontSize: '0.72rem' }}>{cItems.filter(i => i.packed).length}/{cItems.length}</span>
                     </div>
 
                     {cItems.map(item => (
-                      <div key={item.id} className="pack-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f8fafc' }}>
-                        <label className="check-with-content" style={{ flex: 1, cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={item.packed}
-                            onChange={e => save('packing_items', { packed: e.target.checked }, item.id)}
-                          />
-                          <span>
-                            <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.92rem' }}>{item.name}</span>
-                            {item.notes && <small className="muted clamp">{item.notes}</small>}
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <button
+                          type="button"
+                          onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                        >
+                          {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
+                          <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                            {item.name}
+                            {item.notes && <small className="muted" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>({item.notes})</small>}
                           </span>
-                        </label>
-                        <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item">
-                          <Trash2 size={15} style={{ color: '#94a3b8' }} />
+                        </button>
+                        <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
+                          <Trash2 size={14} style={{ color: '#94a3b8' }} />
                         </Btn>
                       </div>
                     ))}
@@ -266,8 +266,8 @@ export function Packing(ctx) {
               })}
 
               {personItems.length === 0 && personShared.length === 0 && (
-                <div className="muted tiny" style={{ fontStyle: 'italic', padding: '8px 0' }}>
-                  No items in {person.name}'s card yet. Tap above to add items.
+                <div className="muted tiny" style={{ fontStyle: 'italic', padding: '4px 0' }}>
+                  No items in {person.name}'s list yet. Tap + Add above.
                 </div>
               )}
             </article>
@@ -280,19 +280,19 @@ export function Packing(ctx) {
           const sPacked = sharedItems.filter(i => i.packed).length;
 
           return (
-            <article className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', background: '#fafafb' }}>
-              <div className="row between align-center" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+            <article className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', padding: '14px 16px', gap: '10px', background: '#fafafb' }}>
+              <div className="row between align-center" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
                 <div className="row align-center" style={{ gap: '8px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                    <Users size={17} />
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                    <Users size={15} />
                   </div>
                   <div>
-                    <strong style={{ fontSize: '1.05rem' }}>Shared Trip Essentials</strong>
-                    <div className="muted tiny">{sPacked} of {sharedItems.length} packed</div>
+                    <strong style={{ fontSize: '0.98rem' }}>Shared Trip Essentials</strong>
+                    <span className="muted tiny" style={{ marginLeft: '8px' }}>{sPacked}/{sharedItems.length} packed</span>
                   </div>
                 </div>
-                <Btn kind="outline" style={{ fontSize: '0.78rem', padding: '4px 10px' }} onClick={() => openAddModal('shared')}>
-                  <Plus size={14} /> Add Shared Item
+                <Btn kind="ghost" style={{ fontSize: '0.78rem', color: '#d97706', padding: '2px 8px' }} onClick={() => openAddModal('shared')}>
+                  <Plus size={14} /> Add
                 </Btn>
               </div>
 
@@ -301,26 +301,25 @@ export function Packing(ctx) {
                 if (cItems.length === 0) return null;
 
                 return (
-                  <div key={cat.id} className="stack compact" style={{ paddingTop: '6px' }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
+                  <div key={cat.id} style={{ marginBottom: '4px' }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
                     {cItems.map(item => (
-                      <div key={item.id} className="pack-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f8fafc' }}>
-                        <label className="check-with-content" style={{ flex: 1, cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={item.packed}
-                            onChange={e => save('packing_items', { packed: e.target.checked }, item.id)}
-                          />
-                          <span>
-                            <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.92rem' }}>{item.name}</span>
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <button
+                          type="button"
+                          onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                        >
+                          {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
+                          <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                            {item.name}
                             {item.responsible_id && (
-                              <small className="muted"> · {whom(item.responsible_id)} bringing</small>
+                              <small className="muted" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>({whom(item.responsible_id)} bringing)</small>
                             )}
-                            {item.notes && <small className="muted clamp">{item.notes}</small>}
                           </span>
-                        </label>
-                        <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item">
-                          <Trash2 size={15} style={{ color: '#94a3b8' }} />
+                        </button>
+                        <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
+                          <Trash2 size={14} style={{ color: '#94a3b8' }} />
                         </Btn>
                       </div>
                     ))}
@@ -329,7 +328,7 @@ export function Packing(ctx) {
               })}
 
               {sharedItems.length === 0 && (
-                <div className="muted tiny" style={{ fontStyle: 'italic', padding: '8px 0' }}>
+                <div className="muted tiny" style={{ fontStyle: 'italic', padding: '4px 0' }}>
                   No shared essentials added yet.
                 </div>
               )}
@@ -341,20 +340,21 @@ export function Packing(ctx) {
       {/* --- ADD ITEM MODAL --- */}
       {addModalOpen && (
         <Modal title="Add Packing Item" onClose={() => setAddModalOpen(false)}>
-          <form className="stack" onSubmit={handleAddItem}>
+          <form className="stack" onSubmit={handleAddItem} style={{ gap: '12px' }}>
             <Field label="Item Name">
               <input
                 autoFocus
                 placeholder="e.g. Winter Clothes, Toothbrush, Passport"
                 value={name}
                 onChange={e => setName(e.target.value)}
+                style={{ fontSize: '15px', fontFamily: 'inherit' }}
                 required
               />
             </Field>
 
             <div className="form-grid">
               <Field label="Category">
-                <select value={catId} onChange={e => setCatId(e.target.value)} required>
+                <select value={catId} onChange={e => setCatId(e.target.value)} style={{ fontSize: '15px', fontFamily: 'inherit' }} required>
                   {cats.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -362,7 +362,7 @@ export function Packing(ctx) {
               </Field>
 
               <Field label="Item Type">
-                <select value={isShared ? 'shared' : 'personal'} onChange={e => setIsShared(e.target.value === 'shared')}>
+                <select value={isShared ? 'shared' : 'personal'} onChange={e => setIsShared(e.target.value === 'shared')} style={{ fontSize: '15px', fontFamily: 'inherit' }}>
                   <option value="personal">Personal Item</option>
                   <option value="shared">Shared Item</option>
                 </select>
@@ -371,7 +371,7 @@ export function Packing(ctx) {
 
             {!isShared ? (
               <Field label="Add to who's card?">
-                <div className="stack compact" style={{ paddingTop: '4px' }}>
+                <div className="stack compact" style={{ paddingTop: '4px', gap: '8px' }}>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
                       type="button"
@@ -389,7 +389,7 @@ export function Packing(ctx) {
                     </button>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '4px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {travelers.map(t => {
                       const isSel = selectedTravelerIds.includes(t.id);
                       return (
@@ -424,7 +424,7 @@ export function Packing(ctx) {
               </Field>
             ) : (
               <Field label="Who is bringing this? (Optional)">
-                <select value={responsibleId} onChange={e => setResponsibleId(e.target.value)}>
+                <select value={responsibleId} onChange={e => setResponsibleId(e.target.value)} style={{ fontSize: '15px', fontFamily: 'inherit' }}>
                   <option value="">Unassigned</option>
                   {travelers.map(t => (
                     <option key={t.id} value={t.id}>{t.name}</option>
@@ -434,7 +434,7 @@ export function Packing(ctx) {
             )}
 
             <Field label="Notes (Optional)">
-              <input placeholder="e.g. 2 sets, pack in carry-on" value={notes} onChange={e => setNotes(e.target.value)} />
+              <input placeholder="e.g. 2 sets, pack in carry-on" value={notes} onChange={e => setNotes(e.target.value)} style={{ fontSize: '15px', fontFamily: 'inherit' }} />
             </Field>
 
             <div className="row end" style={{ paddingTop: '8px' }}>
@@ -469,7 +469,7 @@ export function Packing(ctx) {
                   placeholder="e.g. Swimwear, Baby Gear..."
                   value={newCatName}
                   onChange={e => setNewCatName(e.target.value)}
-                  style={{ fontSize: '14px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', flex: 1 }}
+                  style={{ fontSize: '15px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', flex: 1, fontFamily: 'inherit' }}
                 />
                 <Btn kind="primary" disabled={!newCatName.trim()} onClick={handleAddCategory}>
                   <Plus size={16} /> Add
