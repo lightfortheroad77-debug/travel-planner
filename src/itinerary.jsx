@@ -67,7 +67,7 @@ function TitleTimeEditor({ n, ctx, onClose }) {
           ))}
         </div>
       )}
-      <small className="muted">Type 930 for 09:30. Blank = TBD. Reservation statuses are edited from Day view.</small>
+      <small className="muted">Type 930 for 09:30. Blank = TBD.</small>
       <div className="row end">
         <Btn onClick={onClose}>Cancel</Btn>
         <Btn kind="primary" disabled={saving || !title.trim() || list.some(e => parseTime(time[e.id] || '') === false)} onClick={commit}>
@@ -141,7 +141,7 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
 }
 
 function ActivityEditor({ ctx, activity, onClose }) {
-  const { save, toast, trip } = ctx;
+  const { save, remove, toast, trip } = ctx;
   const [v, setV] = useState({ 
     ...blankActivity, 
     ...activity, 
@@ -174,6 +174,13 @@ function ActivityEditor({ ctx, activity, onClose }) {
     }
   }
 
+  async function del() {
+    if (window.confirm(`Delete "${v.title}"?`)) {
+      const ok = await remove('activities', activity);
+      if (ok) onClose();
+    }
+  }
+
   const dayOptions = [
     { value: 'ideas', label: 'Unscheduled (Ideas Inbox)' },
     ...tripDays(trip).map(d => ({ value: String(d.n), label: `Day ${d.n} · ${dayTitle(ctx.data, d.n)}` }))
@@ -189,13 +196,17 @@ function ActivityEditor({ ctx, activity, onClose }) {
           <Select value={v.day_number === null ? 'ideas' : String(v.day_number)} onChange={x => update('day_number', x)} options={dayOptions} />
         </Field>
         {v.day_number !== 'ideas' && v.day_number !== null && (
-          <Field label="Start time"><TimeEntry value={v.start_time} onChange={x => update('start_time', x)} /></Field>
+          <Field label="Start time">
+            <TimeEntry value={v.start_time} onChange={x => update('start_time', x)} />
+          </Field>
         )}
       </div>
 
-      <Field label="Type"><Select value={v.kind} onChange={x => update('kind', x)} options={typeOptions} /></Field>
-      <Field label="City / Area"><input list="known-cities" value={v.city_area} onChange={e => update('city_area', e.target.value)} placeholder="Optional" /></Field>
-      
+      <div className="form-grid">
+        <Field label="Type"><Select value={v.kind} onChange={x => update('kind', x)} options={typeOptions} /></Field>
+        <Field label="City / Area"><input list="known-cities" value={v.city_area} onChange={e => update('city_area', e.target.value)} placeholder="Optional" /></Field>
+      </div>
+
       {v.kind === 'transport' ? (
         <div className="form-grid">
           <Field label="From"><input value={v.origin} onChange={e => update('origin', e.target.value)} /></Field>
@@ -205,7 +216,7 @@ function ActivityEditor({ ctx, activity, onClose }) {
         <Field label="Place / address"><input value={v.place} onChange={e => update('place', e.target.value)} /></Field>
       )}
 
-      <Field label="Google Maps URL (optional)" help="Exact pin or route overrides the automatically generated Maps link.">
+      <Field label="Google Maps URL (optional)">
         <input type="url" value={v.maps_url} onChange={e => update('maps_url', e.target.value)} placeholder="https://maps.app.goo.gl/..." />
       </Field>
 
@@ -221,9 +232,16 @@ function ActivityEditor({ ctx, activity, onClose }) {
         <textarea rows="3" value={v.notes} onChange={e => update('notes', e.target.value)} />
       </Field>
 
-      <div className="row end">
-        <Btn onClick={onClose}>Cancel</Btn>
-        <Btn kind="primary" onClick={commit} disabled={saving || !v.title.trim() || v.start_time === false}>{saving ? 'Saving...' : 'Save changes'}</Btn>
+      <div className="row between align-center">
+        <Btn kind="danger-button" onClick={del} type="button">
+          <Trash2 size={15} /> Delete
+        </Btn>
+        <div className="row">
+          <Btn onClick={onClose} type="button">Cancel</Btn>
+          <Btn kind="primary" onClick={commit} disabled={saving || !v.title.trim() || v.start_time === false}>
+            {saving ? 'Saving...' : 'Save changes'}
+          </Btn>
+        </div>
       </div>
     </div>
   );
@@ -421,8 +439,8 @@ export function EventCard({ ctx, event }) {
 
         <div className="event-actions">
           <MapButton activity={event} />
+          {/* Action menu cleanly contains Duplicate, Send to Ideas, and Delete */}
           <ActionMenu items={[
-            { label: 'Edit details', icon: <Pencil size={15} />, onClick: () => setEditor(true) },
             { label: 'Duplicate', icon: <Copy size={15} />, onClick: duplicate },
             { label: 'Send to Ideas', icon: <Lightbulb size={15} />, onClick: sendIdea },
             { label: 'Delete', icon: <Trash2 size={15} />, danger: true, onClick: del }
@@ -558,7 +576,7 @@ export function Ideas(ctx) {
   return (
     <div className="stack spacious">
       <SectionTitle title="Ideas inbox" sub={`${ideas.length} unscheduled ideas · Organise by city without choosing a day`} action={<Btn kind="primary" onClick={() => setQuick(v => !v)}><Plus size={16} /> Add idea</Btn>} />
-      {quick && <QuickAdd isIdea ctx={ctx} onClose={() => setQuick(false)} />}
+      {quick && <QuickAdd isIdea ctx={ctx} onClose={()=>setQuick(false)} />}
       <div className="row wrap">
         <input className="search-field" placeholder="Search places, notes or city..." value={search} onChange={e => setSearch(e.target.value)} />
         <Select value={city} onChange={setCity} options={[{ value: 'all', label: 'All cities' }, ...cities.map(c => ({ value: c, label: c })), { value: 'unsorted', label: 'Unsorted' }]} />
