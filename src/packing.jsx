@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Users, FolderPlus, Luggage, CheckCircle2, Circle } from 'lucide-react';
+import { Plus, Trash2, Users, FolderPlus, Luggage, CheckCircle2, Circle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Btn, Field, SectionTitle, Modal, Progress, Empty } from './ui.jsx';
 
 export function Packing(ctx) {
   const { data, save, saveMany, remove, toast } = ctx;
 
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | traveler.id | 'shared'
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | traveler.id | 'shared' | 'by_bag'
+  const [collapsedCards, setCollapsedCards] = useState({});
+
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [newCatModalOpen, setNewCatModalOpen] = useState(false);
   const [newBagModalOpen, setNewBagModalOpen] = useState(false);
@@ -28,13 +30,15 @@ export function Packing(ctx) {
   const travelers = data.travelers || [];
 
   const whom = id => travelers.find(p => p.id === id)?.name || 'Shared';
-  const bagNameOf = id => bags.find(b => b.id === id)?.name;
+  const bagNameOf = id => bags.find(b => b.id === id)?.name || 'Unassigned';
+
+  const toggleCard = id => setCollapsedCards(prev => ({ ...prev, [id]: !prev[id] }));
 
   // Open Add Modal
-  function openAddModal(defaultOwnerId = null) {
+  function openAddModal(defaultOwnerId = null, defaultBagId = null) {
     setName('');
     setCatId(cats[0]?.id || '');
-    setBagId('');
+    setBagId(defaultBagId || '');
     if (defaultOwnerId === 'shared') {
       setIsShared(true);
       setSelectedTravelerIds([]);
@@ -119,15 +123,16 @@ export function Packing(ctx) {
 
   const displayPeople = travelers.filter(t => activeTab === 'all' || activeTab === t.id);
   const showSharedCard = activeTab === 'all' || activeTab === 'shared';
+  const showBagCards = activeTab === 'by_bag';
 
   const totalItems = data.packing_items.length;
   const totalPacked = data.packing_items.filter(i => i.packed).length;
 
   return (
-    <div className="stack spacious">
+    <div className="stack spacious" style={{ position: 'relative', paddingBottom: '60px' }}>
       <SectionTitle
         title="Packing List"
-        sub="Personal cards for each family member with checkboxes and category grouping"
+        sub="Personal cards for each family member with checkboxes, categories and bag tracking"
         action={
           <Btn kind="primary" onClick={() => openAddModal()}>
             <Plus size={16} /> Add Item
@@ -187,7 +192,23 @@ export function Packing(ctx) {
               cursor: 'pointer'
             }}
           >
-            Shared Items
+            Shared
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('by_bag')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '0.82rem',
+              fontWeight: '600',
+              border: activeTab === 'by_bag' ? '1px solid #2e5b97' : '1px solid #dfe5ed',
+              background: activeTab === 'by_bag' ? '#eaf2fd' : '#ffffff',
+              color: activeTab === 'by_bag' ? '#2e5b97' : '#475569',
+              cursor: 'pointer'
+            }}
+          >
+            🎒 By Bag
           </button>
         </div>
 
@@ -210,40 +231,45 @@ export function Packing(ctx) {
         <Progress done={totalPacked} total={totalItems} />
       </div>
 
-      {/* PERSON-CENTRIC CARDS */}
-      <div className="stack" style={{ gap: '14px' }}>
-        {displayPeople.map(person => {
-          const personItems = data.packing_items.filter(i => i.owner_id === person.id);
-          const personShared = data.packing_items.filter(i => !i.owner_id && i.responsible_id === person.id);
-          const pPacked = personItems.filter(i => i.packed).length + personShared.filter(i => i.packed).length;
-          const pTotal = personItems.length + personShared.length;
+      {/* VIEW BY BAG CARDS */}
+      {showBagCards && (
+        <div className="stack" style={{ gap: '14px' }}>
+          {[...bags, { id: null, name: 'Unassigned Items' }].map(b => {
+            const bagItems = data.packing_items.filter(i => (b.id ? i.bag_id === b.id : !i.bag_id));
+            if (bagItems.length === 0 && !b.id) return null;
 
-          return (
-            <article key={person.id} className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', padding: '14px 16px', gap: '10px' }}>
-              {/* Person Card Header */}
-              <div className="row between align-center" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <div className="row align-center" style={{ gap: '8px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#eaf2fd', color: '#2e5b97', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                    {person.name.charAt(0)}
+            const bPacked = bagItems.filter(i => i.packed).length;
+            const isCollapsed = collapsedCards[`bag-${b.id}`];
+
+            return (
+              <article key={b.id || 'unassigned'} className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', padding: '14px 16px', gap: '10px' }}>
+                <div className="row between align-center" style={{ borderBottom: isCollapsed ? 'none' : '1px solid #f1f5f9', paddingBottom: isCollapsed ? '0' : '8px' }}>
+                  <div className="row align-center" style={{ gap: '8px', cursor: 'pointer' }} onClick={() => toggleCard(`bag-${b.id}`)}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#eaf2fd', color: '#2e5b97', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                      <Luggage size={15} />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: '0.98rem' }}>{b.name}</strong>
+                      <span className="muted tiny" style={{ marginLeft: '8px' }}>{bPacked}/{bagItems.length} packed</span>
+                    </div>
                   </div>
-                  <div>
-                    <strong style={{ fontSize: '0.98rem' }}>{person.name}'s List</strong>
-                    <span className="muted tiny" style={{ marginLeft: '8px' }}>{pPacked}/{pTotal} packed</span>
+
+                  <div className="row compact">
+                    {b.id && (
+                      <Btn kind="ghost" style={{ fontSize: '0.78rem', color: '#2e5b97', padding: '2px 8px' }} onClick={() => openAddModal(null, b.id)}>
+                        <Plus size={14} /> Add
+                      </Btn>
+                    )}
+                    <Btn kind="ghost" style={{ padding: '2px 6px' }} onClick={() => toggleCard(`bag-${b.id}`)} aria-label="Toggle collapse">
+                      {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                    </Btn>
                   </div>
                 </div>
-                <Btn kind="ghost" style={{ fontSize: '0.78rem', color: '#2e5b97', padding: '2px 8px' }} onClick={() => openAddModal(person.id)}>
-                  <Plus size={14} /> Add
-                </Btn>
-              </div>
 
-              {/* Shared Responsibilities assigned to this person */}
-              {personShared.length > 0 && (
-                <div style={{ background: '#f8fafc', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
-                  <div className="muted tiny strong" style={{ color: '#2e5b97', marginBottom: '4px' }}>⚡ Shared Items Assigned:</div>
-                  {personShared.map(item => {
-                    const bName = bagNameOf(item.bag_id);
-                    return (
-                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                {!isCollapsed && (
+                  <div className="stack compact" style={{ gap: '6px' }}>
+                    {bagItems.map(item => (
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed #f1f5f9' }}>
                         <button
                           type="button"
                           onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
@@ -252,131 +278,248 @@ export function Packing(ctx) {
                           {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
                           <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
                             {item.name}
-                            {bName && <span style={{ marginLeft: '6px', fontSize: '0.72rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px', border: '1px solid #cbd5e1', color: '#475569' }}>🎒 {bName}</span>}
+                            <span style={{ marginLeft: '6px', fontSize: '0.72rem', background: '#eaf2fd', padding: '2px 6px', borderRadius: '10px', color: '#2e5b97', fontWeight: 600 }}>
+                              👤 {whom(item.owner_id)}
+                            </span>
                           </span>
                         </button>
                         <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
                           <Trash2 size={14} style={{ color: '#94a3b8' }} />
                         </Btn>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    ))}
 
-              {/* Categories inside Person Card */}
-              {cats.map(cat => {
-                const cItems = personItems.filter(i => i.category_id === cat.id);
-                if (cItems.length === 0) return null;
+                    {bagItems.length === 0 && (
+                      <div className="muted tiny" style={{ fontStyle: 'italic', padding: '4px 0' }}>
+                        No items packed in this bag yet.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
 
-                return (
-                  <div key={cat.id} style={{ marginBottom: '4px' }}>
-                    <div className="row between align-center" style={{ paddingBottom: '3px', borderBottom: '1px dashed #f1f5f9', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
-                      <span className="muted tiny" style={{ fontSize: '0.72rem' }}>{cItems.filter(i => i.packed).length}/{cItems.length}</span>
+      {/* PERSON-CENTRIC CARDS */}
+      {!showBagCards && (
+        <div className="stack" style={{ gap: '14px' }}>
+          {displayPeople.map(person => {
+            const personItems = data.packing_items.filter(i => i.owner_id === person.id);
+            const personShared = data.packing_items.filter(i => !i.owner_id && i.responsible_id === person.id);
+            const pPacked = personItems.filter(i => i.packed).length + personShared.filter(i => i.packed).length;
+            const pTotal = personItems.length + personShared.length;
+            const isCollapsed = collapsedCards[`person-${person.id}`];
+
+            return (
+              <article key={person.id} className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', padding: '14px 16px', gap: '10px' }}>
+                {/* Person Card Header */}
+                <div className="row between align-center" style={{ borderBottom: isCollapsed ? 'none' : '1px solid #f1f5f9', paddingBottom: isCollapsed ? '0' : '8px' }}>
+                  <div className="row align-center" style={{ gap: '8px', cursor: 'pointer' }} onClick={() => toggleCard(`person-${person.id}`)}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#eaf2fd', color: '#2e5b97', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                      {person.name.charAt(0)}
                     </div>
+                    <div>
+                      <strong style={{ fontSize: '0.98rem' }}>{person.name}'s List</strong>
+                      <span className="muted tiny" style={{ marginLeft: '8px' }}>{pPacked}/{pTotal} packed</span>
+                    </div>
+                  </div>
 
-                    {cItems.map(item => {
-                      const bName = bagNameOf(item.bag_id);
+                  <div className="row compact">
+                    <Btn kind="ghost" style={{ fontSize: '0.78rem', color: '#2e5b97', padding: '2px 8px' }} onClick={() => openAddModal(person.id)}>
+                      <Plus size={14} /> Add
+                    </Btn>
+                    <Btn kind="ghost" style={{ padding: '2px 6px' }} onClick={() => toggleCard(`person-${person.id}`)} aria-label="Toggle collapse">
+                      {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                    </Btn>
+                  </div>
+                </div>
+
+                {!isCollapsed && (
+                  <>
+                    {/* Shared Responsibilities assigned to this person */}
+                    {personShared.length > 0 && (
+                      <div style={{ background: '#f8fafc', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '4px' }}>
+                        <div className="muted tiny strong" style={{ color: '#2e5b97', marginBottom: '4px' }}>⚡ Shared Items Assigned:</div>
+                        {personShared.map(item => {
+                          const bName = bagNameOf(item.bag_id);
+                          return (
+                            <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                              <button
+                                type="button"
+                                onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                              >
+                                {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
+                                <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                                  {item.name}
+                                  {bName !== 'Unassigned' && <span style={{ marginLeft: '6px', fontSize: '0.72rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px', border: '1px solid #cbd5e1', color: '#475569' }}>🎒 {bName}</span>}
+                                </span>
+                              </button>
+                              <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
+                                <Trash2 size={14} style={{ color: '#94a3b8' }} />
+                              </Btn>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Categories inside Person Card */}
+                    {cats.map(cat => {
+                      const cItems = personItems.filter(i => i.category_id === cat.id);
+                      if (cItems.length === 0) return null;
+
                       return (
-                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                          <button
-                            type="button"
-                            onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
-                          >
-                            {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
-                            <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
-                              {item.name}
-                              {bName && <span style={{ marginLeft: '6px', fontSize: '0.72rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px', border: '1px solid #cbd5e1', color: '#475569' }}>🎒 {bName}</span>}
-                              {item.notes && <small className="muted" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>({item.notes})</small>}
-                            </span>
-                          </button>
-                          <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
-                            <Trash2 size={14} style={{ color: '#94a3b8' }} />
-                          </Btn>
+                        <div key={cat.id} style={{ marginBottom: '4px' }}>
+                          <div className="row between align-center" style={{ paddingBottom: '3px', borderBottom: '1px dashed #f1f5f9', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
+                            <span className="muted tiny" style={{ fontSize: '0.72rem' }}>{cItems.filter(i => i.packed).length}/{cItems.length}</span>
+                          </div>
+
+                          {cItems.map(item => {
+                            const bName = bagNameOf(item.bag_id);
+                            return (
+                              <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                                >
+                                  {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
+                                  <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                                    {item.name}
+                                    {bName !== 'Unassigned' && <span style={{ marginLeft: '6px', fontSize: '0.72rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px', border: '1px solid #cbd5e1', color: '#475569' }}>🎒 {bName}</span>}
+                                    {item.notes && <small className="muted" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>({item.notes})</small>}
+                                  </span>
+                                </button>
+                                <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
+                                  <Trash2 size={14} style={{ color: '#94a3b8' }} />
+                                </Btn>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })}
-                  </div>
-                );
-              })}
 
-              {personItems.length === 0 && personShared.length === 0 && (
-                <div className="muted tiny" style={{ fontStyle: 'italic', padding: '4px 0' }}>
-                  No items in {person.name}'s list yet. Tap + Add above.
+                    {personItems.length === 0 && personShared.length === 0 && (
+                      <div className="muted tiny" style={{ fontStyle: 'italic', padding: '4px 0' }}>
+                        No items in {person.name}'s list yet. Tap + Add above.
+                      </div>
+                    )}
+                  </>
+                )}
+              </article>
+            );
+          })}
+
+          {/* SHARED ITEMS CARD */}
+          {showSharedCard && (() => {
+            const sharedItems = data.packing_items.filter(i => !i.owner_id);
+            const sPacked = sharedItems.filter(i => i.packed).length;
+            const isCollapsed = collapsedCards['shared-card'];
+
+            return (
+              <article className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', padding: '14px 16px', gap: '10px', background: '#fafafb' }}>
+                <div className="row between align-center" style={{ borderBottom: isCollapsed ? 'none' : '1px solid #f1f5f9', paddingBottom: isCollapsed ? '0' : '8px' }}>
+                  <div className="row align-center" style={{ gap: '8px', cursor: 'pointer' }} onClick={() => toggleCard('shared-card')}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                      <Users size={15} />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: '0.98rem' }}>Shared Trip Essentials</strong>
+                      <span className="muted tiny" style={{ marginLeft: '8px' }}>{sPacked}/{sharedItems.length} packed</span>
+                    </div>
+                  </div>
+
+                  <div className="row compact">
+                    <Btn kind="ghost" style={{ fontSize: '0.78rem', color: '#d97706', padding: '2px 8px' }} onClick={() => openAddModal('shared')}>
+                      <Plus size={14} /> Add
+                    </Btn>
+                    <Btn kind="ghost" style={{ padding: '2px 6px' }} onClick={() => toggleCard('shared-card')} aria-label="Toggle collapse">
+                      {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                    </Btn>
+                  </div>
                 </div>
-              )}
-            </article>
-          );
-        })}
 
-        {/* SHARED ITEMS CARD */}
-        {showSharedCard && (() => {
-          const sharedItems = data.packing_items.filter(i => !i.owner_id);
-          const sPacked = sharedItems.filter(i => i.packed).length;
+                {!isCollapsed && (
+                  <>
+                    {cats.map(cat => {
+                      const cItems = sharedItems.filter(i => i.category_id === cat.id);
+                      if (cItems.length === 0) return null;
 
-          return (
-            <article className="card stack" style={{ border: '1px solid #cbd5e1', borderRadius: '12px', padding: '14px 16px', gap: '10px', background: '#fafafb' }}>
-              <div className="row between align-center" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                <div className="row align-center" style={{ gap: '8px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                    <Users size={15} />
-                  </div>
-                  <div>
-                    <strong style={{ fontSize: '0.98rem' }}>Shared Trip Essentials</strong>
-                    <span className="muted tiny" style={{ marginLeft: '8px' }}>{sPacked}/{sharedItems.length} packed</span>
-                  </div>
-                </div>
-                <Btn kind="ghost" style={{ fontSize: '0.78rem', color: '#d97706', padding: '2px 8px' }} onClick={() => openAddModal('shared')}>
-                  <Plus size={14} /> Add
-                </Btn>
-              </div>
-
-              {cats.map(cat => {
-                const cItems = sharedItems.filter(i => i.category_id === cat.id);
-                if (cItems.length === 0) return null;
-
-                return (
-                  <div key={cat.id} style={{ marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
-                    {cItems.map(item => {
-                      const bName = bagNameOf(item.bag_id);
                       return (
-                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                          <button
-                            type="button"
-                            onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
-                          >
-                            {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
-                            <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
-                              {item.name}
-                              {bName && <span style={{ marginLeft: '6px', fontSize: '0.72rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px', border: '1px solid #cbd5e1', color: '#475569' }}>🎒 {bName}</span>}
-                              {item.responsible_id && (
-                                <small className="muted" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>({whom(item.responsible_id)} bringing)</small>
-                              )}
-                            </span>
-                          </button>
-                          <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
-                            <Trash2 size={14} style={{ color: '#94a3b8' }} />
-                          </Btn>
+                        <div key={cat.id} style={{ marginBottom: '4px' }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.name}</span>
+                          {cItems.map(item => {
+                            const bName = bagNameOf(item.bag_id);
+                            return (
+                              <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => save('packing_items', { packed: !item.packed }, item.id)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1 }}
+                                >
+                                  {item.packed ? <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} /> : <Circle size={18} style={{ color: '#cbd5e1', flexShrink: 0 }} />}
+                                  <span className={item.packed ? 'strike' : ''} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                                    {item.name}
+                                    {bName !== 'Unassigned' && <span style={{ marginLeft: '6px', fontSize: '0.72rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px', border: '1px solid #cbd5e1', color: '#475569' }}>🎒 {bName}</span>}
+                                    {item.responsible_id && (
+                                      <small className="muted" style={{ marginLeft: '6px', fontSize: '0.75rem' }}>({whom(item.responsible_id)} bringing)</small>
+                                    )}
+                                  </span>
+                                </button>
+                                <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item" style={{ padding: '2px' }}>
+                                  <Trash2 size={14} style={{ color: '#94a3b8' }} />
+                                </Btn>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })}
-                  </div>
-                );
-              })}
 
-              {sharedItems.length === 0 && (
-                <div className="muted tiny" style={{ fontStyle: 'italic', padding: '4px 0' }}>
-                  No shared essentials added yet.
-                </div>
-              )}
-            </article>
-          );
-        })()}
-      </div>
+                    {sharedItems.length === 0 && (
+                      <div className="muted tiny" style={{ fontStyle: 'italic', padding: '4px 0' }}>
+                        No shared essentials added yet.
+                      </div>
+                    )}
+                  </>
+                )}
+              </article>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* STICKY FLOATING ACTION BUTTON (FAB) */}
+      <button
+        type="button"
+        onClick={() => openAddModal()}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          width: '52px',
+          height: '52px',
+          borderRadius: '50%',
+          backgroundColor: '#2e5b97',
+          color: '#ffffff',
+          border: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          justify: 'center',
+          zIndex: 99,
+          cursor: 'pointer'
+        }}
+        aria-label="Quick Add Packing Item"
+        title="Add Packing Item"
+      >
+        <Plus size={24} />
+      </button>
 
       {/* --- ADD ITEM MODAL --- */}
       {addModalOpen && (
