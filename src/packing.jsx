@@ -1,338 +1,360 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Users, FolderPlus, ChevronDown, ChevronRight, Check, X } from 'lucide-react';
-import { Btn, Field, SectionTitle, Select, Modal, Progress, Empty } from './ui.jsx';
+import { Plus, Trash2, Users, FolderPlus, ChevronDown, ChevronUp, ChevronRight, Check, X, Luggage, UserCheck, Pencil } from 'lucide-react';
+import { Btn, Field, SectionTitle, Modal, Progress, Empty } from './ui.jsx';
 
 export function Packing(ctx) {
   const { data, save, saveMany, remove, toast } = ctx;
-  const [mode, setMode] = useState('people'); // 'people' | 'bags'
-  const [owner, setOwner] = useState('all');
-  const [bag, setBag] = useState('all');
+
+  // Navigation & Filter States
+  const [filter, setFilter] = useState('all'); // 'all' | 'shared' | traveler.id
   const [openCats, setOpenCats] = useState({});
-  const [editingId, setEditingId] = useState(null);
 
-  // Quick-Add Form State
-  const [newItemName, setNewItemName] = useState('');
-  const [newCatId, setNewCatId] = useState('');
-  const [newAssignee, setNewAssignee] = useState('everyone'); // 'everyone' | 'shared' | traveler.id
-  const [newQty, setNewQty] = useState(1);
+  // Modals State
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState(null);
+  const [manageCatsOpen, setManageCatsOpen] = useState(false);
 
-  // Category & Bag Modals
-  const [newCategory, setNewCategory] = useState(false);
+  // Add Form State
+  const [itemName, setItemName] = useState('');
+  const [catId, setCatId] = useState('');
+  const [isShared, setIsShared] = useState(false);
+  const [selectedTravelers, setSelectedTravelers] = useState([]); // Array of traveler IDs
+  const [responsibleId, setResponsibleId] = useState('');
+  const [bagId, setBagId] = useState('');
+  const [notes, setNotes] = useState('');
+
+  // Category Editing State
   const [categoryName, setCategoryName] = useState('');
-  const [newBag, setNewBag] = useState(false);
-  const [bagName, setBagName] = useState('');
+  const [editingCatId, setEditingCatId] = useState(null);
+  const [editingCatName, setEditingCatName] = useState('');
 
   const cats = [...data.packing_categories].sort((a, b) => a.position - b.position);
   const bags = data.packing_bags;
   const travelers = data.travelers;
 
   const whom = id => travelers.find(p => p.id === id)?.name || 'Shared';
-  const bagNameOf = id => bags.find(b => b.id === id)?.name || 'Unassigned';
 
-  const personal = mode === 'people'
-    ? data.packing_items.filter(i => owner === 'all' || (owner === 'shared' && !i.owner_id) || i.owner_id === owner)
-    : data.packing_items.filter(i => bag === 'all' || (bag === 'none' && !i.bag_id) || i.bag_id === bag);
+  // Filter items based on active tab selection
+  const items = data.packing_items.filter(i => {
+    if (filter === 'all') return true;
+    if (filter === 'shared') return !i.owner_id;
+    return i.owner_id === filter;
+  });
 
-  const sharedResponsibilities = mode === 'people' && !['all', 'shared'].includes(owner)
-    ? data.packing_items.filter(i => !i.owner_id && i.responsible_id === owner)
+  // Shared items assigned to active person for packing responsibility
+  const sharedForPerson = filter !== 'all' && filter !== 'shared'
+    ? data.packing_items.filter(i => !i.owner_id && i.responsible_id === filter)
     : [];
 
-  const tracked = [...sharedResponsibilities, ...personal];
-  const done = tracked.filter(i => i.packed).length;
-  const sortedCats = cats.filter(c => personal.some(i => i.category_id === c.id));
+  const trackedAll = [...items, ...sharedForPerson];
+  const packedCount = trackedAll.filter(i => i.packed).length;
 
-  // Default quick add category if not set
-  const activeCatId = newCatId || cats[0]?.id || '';
+  // Open Add Item Modal with smart defaults
+  function openAddModal() {
+    setItemName('');
+    setCatId(cats[0]?.id || '');
+    setIsShared(false);
+    setSelectedTravelers(filter !== 'all' && filter !== 'shared' ? [filter] : travelers.map(t => t.id));
+    setResponsibleId('');
+    setBagId('');
+    setNotes('');
+    setAddModalOpen(true);
+  }
 
-  async function handleQuickAdd(e) {
+  // Handle Add Form Submission
+  async function handleCreateItem(e) {
     if (e) e.preventDefault();
-    if (!newItemName.trim() || !activeCatId) return;
+    if (!itemName.trim() || !catId) return;
 
     const basePayload = {
-      name: newItemName.trim(),
-      category_id: activeCatId,
-      quantity: Number(newQty) || 1,
-      packed: false,
-      notes: ''
+      name: itemName.trim(),
+      category_id: catId,
+      bag_id: bagId || null,
+      notes: notes.trim(),
+      quantity: 1,
+      packed: false
     };
 
     let ok = false;
-    if (newAssignee === 'everyone') {
-      const variants = travelers.map(p => ({ ...basePayload, owner_id: p.id, responsible_id: null }));
-      ok = await saveMany('packing_items', variants);
-    } else if (newAssignee === 'shared') {
-      ok = await save('packing_items', { ...basePayload, owner_id: null, responsible_id: null });
+    if (isShared) {
+      ok = await save('packing_items', {
+        ...basePayload,
+        owner_id: null,
+        responsible_id: responsibleId || null
+      });
     } else {
-      ok = await save('packing_items', { ...basePayload, owner_id: newAssignee, responsible_id: null });
+      if (selectedTravelers.length === 0) {
+        toast('Select at least one person.');
+        return;
+      }
+      const payloads = selectedTravelers.map(tId => ({
+        ...basePayload,
+        owner_id: tId,
+        responsible_id: null
+      }));
+      ok = await saveMany('packing_items', payloads);
     }
 
     if (ok) {
-      setNewItemName('');
+      setAddModalOpen(false);
       toast('Item added to packing list.');
     }
   }
 
-  async function handleDeleteGroup(group) {
-    if (group.items.length === 1) {
-      if (window.confirm(`Delete "${group.name}"?`)) {
-        await remove('packing_items', group.items[0]);
-      }
-      return;
+  // Delete single item for 1 person
+  async function handleDeleteSingle(item) {
+    const name = whom(item.owner_id);
+    if (window.confirm(`Delete "${item.name}" for ${name}?`)) {
+      await remove('packing_items', item);
+      setDeletingGroup(null);
     }
+  }
 
-    const choice = window.confirm(`Delete "${group.name}" for ALL family members?\n\nClick OK to delete for everyone, or Cancel to keep.`);
-    if (choice) {
+  // Delete grouped item for everyone
+  async function handleDeleteEveryone(group) {
+    if (window.confirm(`Delete "${group.name}" for EVERYONE?`)) {
       for (const item of group.items) {
         await remove('packing_items', item, { allowUndo: false });
       }
+      setDeletingGroup(null);
       toast(`Deleted "${group.name}" for everyone.`);
     }
   }
 
-  async function addCategory() {
-    if (!categoryName.trim()) return;
-    const ok = await save('packing_categories', { name: categoryName.trim(), position: cats.length });
-    if (ok) { setNewCategory(false); setCategoryName(''); }
+  // Delete a packing category and all items inside it
+  async function handleDeleteCategory(cat) {
+    const catItems = data.packing_items.filter(i => i.category_id === cat.id);
+    const msg = catItems.length > 0
+      ? `Delete category "${cat.name}" and all ${catItems.length} item(s) in it?`
+      : `Delete category "${cat.name}"?`;
+
+    if (window.confirm(msg)) {
+      for (const item of catItems) {
+        await remove('packing_items', item, { allowUndo: false });
+      }
+      const ok = await remove('packing_categories', cat);
+      if (ok) toast(`Category "${cat.name}" deleted.`);
+    }
   }
 
-  async function addBag() {
-    if (!bagName.trim()) return;
-    const ok = await save('packing_bags', { name: bagName.trim() });
-    if (ok) { setNewBag(false); setBagName(''); }
+  // Rename a packing category
+  async function handleRenameCategory(catIdToRename, newName) {
+    if (!newName.trim()) return;
+    const cat = cats.find(c => c.id === catIdToRename);
+    if (!cat || cat.name === newName.trim()) return;
+    const ok = await save('packing_categories', { name: newName.trim(), position: cat.position }, cat.id);
+    if (ok) {
+      setEditingCatId(null);
+      toast('Category renamed.');
+    }
+  }
+
+  // Toggle selection for traveler chips in Add Modal
+  function toggleTravelerChip(tId) {
+    if (selectedTravelers.includes(tId)) {
+      setSelectedTravelers(selectedTravelers.filter(id => id !== tId));
+    } else {
+      setSelectedTravelers([...selectedTravelers, tId]);
+    }
+  }
+
+  async function createCategory() {
+    if (!categoryName.trim()) return;
+    const ok = await save('packing_categories', { name: categoryName.trim(), position: cats.length });
+    if (ok) { setCategoryName(''); toast('Category added.'); }
   }
 
   return (
     <div className="stack spacious">
-      <SectionTitle title="Packing List" sub="Personal lists, shared responsibilities and bag contents — without duplicates" />
+      <SectionTitle
+        title="Packing List"
+        sub="Organise items by traveler or shared trip essentials"
+        action={
+          <Btn kind="primary" onClick={openAddModal}>
+            <Plus size={16} /> Add Item
+          </Btn>
+        }
+      />
 
-      {/* Mode Switcher Tabs */}
-      <div className="tab-row">
-        <button className={mode === 'people' ? 'active' : ''} onClick={() => setMode('people')}>By person / Shared</button>
-        <button className={mode === 'bags' ? 'active' : ''} onClick={() => setMode('bags')}>By bag</button>
-      </div>
-
-      {/* Filter Pill Bar */}
-      <div className="stack compact">
-        <div className="row between align-center wrap">
-          {mode === 'people' ? (
-            <div className="filter-pills-bar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', WebkitOverflowScrolling: 'touch', flex: 1 }}>
-              <button type="button" className={`pill-btn ${owner === 'all' ? 'active' : ''}`} onClick={() => setOwner('all')} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', border: owner === 'all' ? '1px solid #2e5b97' : '1px solid #dfe5ed', background: owner === 'all' ? '#eaf2fd' : '#ffffff', color: owner === 'all' ? '#2e5b97' : '#475569', cursor: 'pointer' }}>All</button>
-              <button type="button" className={`pill-btn ${owner === 'shared' ? 'active' : ''}`} onClick={() => setOwner('shared')} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', border: owner === 'shared' ? '1px solid #2e5b97' : '1px solid #dfe5ed', background: owner === 'shared' ? '#eaf2fd' : '#ffffff', color: owner === 'shared' ? '#2e5b97' : '#475569', cursor: 'pointer' }}>Shared</button>
-              {travelers.map(t => (
-                <button key={t.id} type="button" className={`pill-btn ${owner === t.id ? 'active' : ''}`} onClick={() => setOwner(t.id)} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', border: owner === t.id ? '1px solid #2e5b97' : '1px solid #dfe5ed', background: owner === t.id ? '#eaf2fd' : '#ffffff', color: owner === t.id ? '#2e5b97' : '#475569', cursor: 'pointer' }}>{t.name}</button>
-              ))}
-            </div>
-          ) : (
-            <div className="row wrap align-center" style={{ flex: 1 }}>
-              <div className="filter-pills-bar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', WebkitOverflowScrolling: 'touch' }}>
-                <button type="button" className={`pill-btn ${bag === 'all' ? 'active' : ''}`} onClick={() => setBag('all')} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', border: bag === 'all' ? '1px solid #2e5b97' : '1px solid #dfe5ed', background: bag === 'all' ? '#eaf2fd' : '#ffffff', color: bag === 'all' ? '#2e5b97' : '#475569', cursor: 'pointer' }}>All bags</button>
-                <button type="button" className={`pill-btn ${bag === 'none' ? 'active' : ''}`} onClick={() => setBag('none')} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', border: bag === 'none' ? '1px solid #2e5b97' : '1px solid #dfe5ed', background: bag === 'none' ? '#eaf2fd' : '#ffffff', color: bag === 'none' ? '#2e5b97' : '#475569', cursor: 'pointer' }}>Unassigned</button>
-                {bags.map(b => (
-                  <button key={b.id} type="button" className={`pill-btn ${bag === b.id ? 'active' : ''}`} onClick={() => setBag(b.id)} style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', border: bag === b.id ? '1px solid #2e5b97' : '1px solid #dfe5ed', background: bag === b.id ? '#eaf2fd' : '#ffffff', color: bag === b.id ? '#2e5b97' : '#475569', cursor: 'pointer' }}>{b.name}</button>
-                ))}
-              </div>
-              <Btn onClick={() => setNewBag(true)}><Plus size={15} /> New bag</Btn>
-            </div>
-          )}
-          <Btn onClick={() => setNewCategory(true)}><FolderPlus size={16} /> Category</Btn>
+      {/* Filter Pill Row & Manage Categories Button */}
+      <div className="row wrap between align-center">
+        <div className="filter-pills-bar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', WebkitOverflowScrolling: 'touch', flex: 1 }}>
+          <button
+            type="button"
+            className={`pill-btn ${filter === 'all' ? 'active' : ''}`}
+            onClick={() => setFilter('all')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '20px',
+              fontSize: '0.84rem',
+              fontWeight: '600',
+              border: filter === 'all' ? '1px solid #2e5b97' : '1px solid #dfe5ed',
+              background: filter === 'all' ? '#eaf2fd' : '#ffffff',
+              color: filter === 'all' ? '#2e5b97' : '#475569',
+              cursor: 'pointer'
+            }}
+          >
+            All Family
+          </button>
+          <button
+            type="button"
+            className={`pill-btn ${filter === 'shared' ? 'active' : ''}`}
+            onClick={() => setFilter('shared')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '20px',
+              fontSize: '0.84rem',
+              fontWeight: '600',
+              border: filter === 'shared' ? '1px solid #2e5b97' : '1px solid #dfe5ed',
+              background: filter === 'shared' ? '#eaf2fd' : '#ffffff',
+              color: filter === 'shared' ? '#2e5b97' : '#475569',
+              cursor: 'pointer'
+            }}
+          >
+            Shared
+          </button>
+          {travelers.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              className={`pill-btn ${filter === t.id ? 'active' : ''}`}
+              onClick={() => setFilter(t.id)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '20px',
+                fontSize: '0.84rem',
+                fontWeight: '600',
+                border: filter === t.id ? '1px solid #2e5b97' : '1px solid #dfe5ed',
+                background: filter === t.id ? '#eaf2fd' : '#ffffff',
+                color: filter === t.id ? '#2e5b97' : '#475569',
+                cursor: 'pointer'
+              }}
+            >
+              {t.name}
+            </button>
+          ))}
         </div>
+
+        <Btn onClick={() => setManageCatsOpen(true)} style={{ fontSize: '0.8rem' }}>
+          <FolderPlus size={15} /> Categories
+        </Btn>
       </div>
 
-      {/* Progress Summary */}
+      {/* Progress Header Card */}
       <div className="card stack compact">
         <div className="row between">
-          <strong>{mode === 'people' ? (owner === 'all' ? 'All family items' : owner === 'shared' ? 'Shared packing' : whom(owner)) : (bag === 'all' ? 'All bags' : bag === 'none' ? 'Not assigned' : bagNameOf(bag))}</strong>
-          <span className="muted tiny">{done} of {tracked.length} packed</span>
+          <strong>{filter === 'all' ? 'All Family Items' : filter === 'shared' ? 'Shared Trip Essentials' : `${whom(filter)}'s Checklist`}</strong>
+          <span className="muted tiny">{packedCount} of {trackedAll.length} packed</span>
         </div>
-        <Progress done={done} total={tracked.length} />
+        <Progress done={packedCount} total={trackedAll.length} />
       </div>
 
-      {/* FAST INLINE QUICK-ADD CARD */}
-      <form className="card stack compact" onSubmit={handleQuickAdd} style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-        <strong style={{ fontSize: '0.88rem', color: '#334155' }}>⚡ Quick Add Item</strong>
-        <div className="form-grid" style={{ gridTemplateColumns: '1fr auto', gap: '8px' }}>
-          <input
-            placeholder="Item name (e.g. Toothbrush, Jacket)..."
-            value={newItemName}
-            onChange={e => setNewItemName(e.target.value)}
-            style={{ fontSize: '16px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
-          />
-          <Btn kind="primary" type="submit" disabled={!newItemName.trim() || !activeCatId}>
-            <Plus size={16} /> Add
-          </Btn>
-        </div>
-
-        <div className="row wrap align-center" style={{ gap: '12px', paddingTop: '4px' }}>
-          {/* Category Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span className="muted tiny">Category:</span>
-            <select
-              value={activeCatId}
-              onChange={e => setNewCatId(e.target.value)}
-              style={{ fontSize: '0.82rem', padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
-            >
-              {cats.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+      {/* Shared Responsibilities for Individual Traveler View */}
+      {filter !== 'all' && filter !== 'shared' && sharedForPerson.length > 0 && (
+        <section className="card stack compact" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div className="row align-center" style={{ gap: '6px' }}>
+            <UserCheck size={18} style={{ color: '#2e5b97' }} />
+            <strong style={{ fontSize: '0.92rem', color: '#1e293b' }}>Shared Responsibilities</strong>
           </div>
+          <p className="muted tiny">Items assigned to {whom(filter)} to bring for the whole group.</p>
 
-          {/* Assignee Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-            <span className="muted tiny">For:</span>
-            <button
-              type="button"
-              onClick={() => setNewAssignee('everyone')}
-              style={{
-                padding: '3px 10px',
-                borderRadius: '12px',
-                fontSize: '0.78rem',
-                fontWeight: '600',
-                border: newAssignee === 'everyone' ? '1px solid #2e5b97' : '1px solid #cbd5e1',
-                background: newAssignee === 'everyone' ? '#eaf2fd' : '#fff',
-                color: newAssignee === 'everyone' ? '#2e5b97' : '#64748b',
-                cursor: 'pointer'
-              }}
-            >
-              All Family
-            </button>
-            <button
-              type="button"
-              onClick={() => setNewAssignee('shared')}
-              style={{
-                padding: '3px 10px',
-                borderRadius: '12px',
-                fontSize: '0.78rem',
-                fontWeight: '600',
-                border: newAssignee === 'shared' ? '1px solid #2e5b97' : '1px solid #cbd5e1',
-                background: newAssignee === 'shared' ? '#eaf2fd' : '#fff',
-                color: newAssignee === 'shared' ? '#2e5b97' : '#64748b',
-                cursor: 'pointer'
-              }}
-            >
-              Shared
-            </button>
-            {travelers.map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setNewAssignee(t.id)}
-                style={{
-                  padding: '3px 10px',
-                  borderRadius: '12px',
-                  fontSize: '0.78rem',
-                  fontWeight: '600',
-                  border: newAssignee === t.id ? '1px solid #2e5b97' : '1px solid #cbd5e1',
-                  background: newAssignee === t.id ? '#eaf2fd' : '#fff',
-                  color: newAssignee === t.id ? '#2e5b97' : '#64748b',
-                  cursor: 'pointer'
-                }}
-              >
-                {t.name}
-              </button>
+          <div className="stack compact" style={{ paddingTop: '4px' }}>
+            {sharedForPerson.map(item => (
+              <div key={item.id} className="pack-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <label className="check-with-content" style={{ flex: 1, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={item.packed}
+                    onChange={e => save('packing_items', { packed: e.target.checked }, item.id)}
+                  />
+                  <span className={item.packed ? 'strike' : ''} style={{ fontWeight: 600 }}>{item.name}</span>
+                </label>
+                <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item">
+                  <Trash2 size={16} />
+                </Btn>
+              </div>
             ))}
           </div>
-        </div>
-      </form>
-
-      {/* Shared Responsibilities */}
-      {mode === 'people' && sharedResponsibilities.length > 0 && (
-        <section className="card stack compact responsibility-section">
-          <div className="row"><Users size={18} /><strong>Shared responsibilities</strong></div>
-          <p className="muted tiny">Shared items assigned to {whom(owner)}. Ticking them updates Shared and By Bag.</p>
-          {sharedResponsibilities.map(i => (
-            <div className="pack-row" key={i.id}>
-              <label className="check-with-content">
-                <input type="checkbox" checked={i.packed} onChange={e => save('packing_items', { packed: e.target.checked }, i.id)} />
-                <span className={i.packed ? 'strike' : ''}>{i.name} {i.quantity > 1 && <span className="muted">× {i.quantity}</span>}</span>
-              </label>
-              <Btn kind="ghost" aria-label="Delete item" onClick={() => remove('packing_items', i)}><Trash2 size={16} /></Btn>
-            </div>
-          ))}
         </section>
       )}
 
-      {/* Categories & Checklist Items */}
+      {/* Categories & Items Checklist */}
       <div className="stack compact">
-        {sortedCats.map(c => {
-          const subset = personal.filter(i => i.category_id === c.id);
-          const open = openCats[c.id] !== false;
+        {cats.map(cat => {
+          const catItems = items.filter(i => i.category_id === cat.id);
+          const isOpen = openCats[cat.id] !== false;
 
-          // Group identical items (e.g. Winter Clothes across family members)
-          const grouped = [];
-          const map = new Map();
-          subset.forEach(item => {
-            const k = item.name.trim().toLowerCase();
-            if (!map.has(k)) {
-              const entry = { name: item.name, items: [item] };
-              map.set(k, entry);
-              grouped.push(entry);
+          // If filtering for a single person / shared and there are no items in this category, hide empty ones
+          if (filter !== 'all' && catItems.length === 0) return null;
+
+          // Group identical item names for "All Family" view
+          const groupedMap = new Map();
+          catItems.forEach(item => {
+            const key = item.name.trim().toLowerCase();
+            if (!groupedMap.has(key)) {
+              groupedMap.set(key, { name: item.name, items: [item] });
             } else {
-              map.get(k).items.push(item);
+              groupedMap.get(key).items.push(item);
             }
           });
+          const groups = Array.from(groupedMap.values());
 
           return (
-            <section className="card pack-category" key={c.id}>
-              <button className="category-toggle" onClick={() => setOpenCats(p => ({ ...p, [c.id]: !open }))}>
-                <span>
-                  <strong>{c.name}</strong>
-                  <small className="muted">{subset.filter(i => i.packed).length}/{subset.length} packed</small>
-                </span>
-                {open ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-              </button>
+            <section className="card pack-category" key={cat.id}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <button
+                  className="category-toggle"
+                  onClick={() => setOpenCats(prev => ({ ...prev, [cat.id]: !isOpen }))}
+                  style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <span>
+                    <strong>{cat.name}</strong>
+                    <small className="muted" style={{ marginLeft: '8px' }}>{catItems.filter(i => i.packed).length}/{catItems.length} packed</small>
+                  </span>
+                  {isOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+                </button>
 
-              {open && (
+                <Btn
+                  kind="ghost"
+                  onClick={e => { e.stopPropagation(); handleDeleteCategory(cat); }}
+                  title={`Delete category "${cat.name}"`}
+                  aria-label="Delete category"
+                  style={{ padding: '6px', color: '#94a3b8' }}
+                >
+                  <Trash2 size={16} />
+                </Btn>
+              </div>
+
+              {isOpen && (
                 <div className="pack-items">
-                  {grouped.map(group => {
-                    // Single Item View
+                  {groups.map(group => {
+                    // Single item view (Individual traveler / Shared tab)
                     if (group.items.length === 1) {
-                      const i = group.items[0];
-                      const isEditingThis = editingId === i.id;
-
+                      const item = group.items[0];
                       return (
-                        <div className="pack-row" key={i.id} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <label className="check-with-content" style={{ flex: 1 }}>
-                              <input type="checkbox" checked={i.packed} onChange={e => save('packing_items', { packed: e.target.checked }, i.id)} />
-                              <span>
-                                <span className={i.packed ? 'strike' : ''}>{i.name} {i.quantity > 1 && <span className="muted">× {i.quantity}</span>}</span>
-                                {(mode === 'bags' || owner === 'all' || owner === 'shared') && <small className="muted">{whom(i.owner_id)}{!i.owner_id && i.responsible_id ? ` · ${whom(i.responsible_id)} responsible` : ''}</small>}
-                                {i.notes && <small className="muted clamp">{i.notes}</small>}
-                              </span>
-                            </label>
-                            <div className="row compact">
-                              <Btn kind="ghost" onClick={() => setEditingId(isEditingThis ? null : i.id)} style={{ fontSize: '0.76rem' }}>
-                                {isEditingThis ? 'Close' : 'Details'}
-                              </Btn>
-                              <Btn kind="ghost" onClick={() => remove('packing_items', i)} aria-label="Delete item"><Trash2 size={16} /></Btn>
-                            </div>
-                          </div>
-
-                          {/* Collapsible Inline Details Editor */}
-                          {isEditingThis && (
-                            <div style={{ background: '#f1f5f9', padding: '10px', borderRadius: '8px', marginTop: '8px' }} className="stack compact">
-                              <div className="form-grid">
-                                <Field label="Bag">
-                                  <select value={i.bag_id || ''} onChange={e => save('packing_items', { bag_id: e.target.value || null }, i.id)}>
-                                    <option value="">No bag assigned</option>
-                                    {bags.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                  </select>
-                                </Field>
-                                <Field label="Quantity">
-                                  <input type="number" min="1" value={i.quantity} onChange={e => save('packing_items', { quantity: Number(e.target.value) || 1 }, i.id)} />
-                                </Field>
-                              </div>
-                              <Field label="Notes">
-                                <input value={i.notes || ''} onChange={e => save('packing_items', { notes: e.target.value }, i.id)} placeholder="Optional note..." />
-                              </Field>
-                            </div>
-                          )}
+                        <div className="pack-row" key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                          <label className="check-with-content" style={{ flex: 1, cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={item.packed}
+                              onChange={e => save('packing_items', { packed: e.target.checked }, item.id)}
+                            />
+                            <span>
+                              <span className={item.packed ? 'strike' : ''} style={{ fontWeight: 500 }}>{item.name}</span>
+                              {filter === 'shared' && item.responsible_id && (
+                                <small className="muted"> · {whom(item.responsible_id)} responsible</small>
+                              )}
+                              {item.notes && <small className="muted clamp">{item.notes}</small>}
+                            </span>
+                          </label>
+                          <Btn kind="ghost" onClick={() => remove('packing_items', item)} aria-label="Delete item">
+                            <Trash2 size={16} />
+                          </Btn>
                         </div>
                       );
                     }
 
-                    // Grouped Item View (e.g. Winter Clothes across family)
+                    // Grouped view for "All Family" tab with 1-tap person badges
                     return (
                       <div className="pack-row grouped-pack-row" key={group.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
@@ -365,40 +387,246 @@ export function Packing(ctx) {
                             ))}
                           </div>
                         </div>
-                        <Btn kind="ghost" onClick={() => handleDeleteGroup(group)} aria-label="Delete grouped item"><Trash2 size={16} /></Btn>
+                        <Btn kind="ghost" onClick={() => setDeletingGroup(group)} aria-label="Delete options">
+                          <Trash2 size={16} />
+                        </Btn>
                       </div>
                     );
                   })}
+
+                  {catItems.length === 0 && (
+                    <div className="muted tiny" style={{ padding: '8px 0', fontStyle: 'italic' }}>
+                      No items in this category yet.
+                    </div>
+                  )}
                 </div>
               )}
             </section>
           );
         })}
 
-        {!sortedCats.length && <Empty text="No items in this view. Add an item above." />}
+        {!cats.length && <Empty text="No packing categories found." />}
       </div>
 
-      {/* Add Category Modal */}
-      {newCategory && (
-        <Modal title="Add packing category" onClose={() => setNewCategory(false)}>
+      {/* --- MODAL: ADD PACKING ITEM --- */}
+      {addModalOpen && (
+        <Modal title="Add Packing Item" onClose={() => setAddModalOpen(false)}>
+          <form className="stack" onSubmit={handleCreateItem}>
+            <Field label="Item Name">
+              <input
+                autoFocus
+                placeholder="e.g. Winter Jacket, Toothbrush, Power Bank"
+                value={itemName}
+                onChange={e => setItemName(e.target.value)}
+                required
+              />
+            </Field>
+
+            <div className="form-grid">
+              <Field label="Category">
+                <select value={catId} onChange={e => setCatId(e.target.value)} required>
+                  {cats.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Type">
+                <select value={isShared ? 'shared' : 'personal'} onChange={e => setIsShared(e.target.value === 'shared')}>
+                  <option value="personal">Personal Item(s)</option>
+                  <option value="shared">Shared Trip Essential</option>
+                </select>
+              </Field>
+            </div>
+
+            {/* Traveler Chip Picker for Personal Items */}
+            {!isShared ? (
+              <Field label="Who needs this item?">
+                <div className="stack compact" style={{ paddingTop: '4px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTravelers(travelers.map(t => t.id))}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        border: '1px solid #2e5b97',
+                        background: '#eaf2fd',
+                        color: '#2e5b97',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Select All Family
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTravelers([])}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#64748b',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '6px' }}>
+                    {travelers.map(t => {
+                      const isSel = selectedTravelers.includes(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => toggleTravelerChip(t.id)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 14px',
+                            borderRadius: '16px',
+                            fontSize: '0.84rem',
+                            fontWeight: '600',
+                            border: isSel ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                            background: isSel ? '#f0fdf4' : '#ffffff',
+                            color: isSel ? '#15803d' : '#475569',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span>{isSel ? '✓' : '○'}</span>
+                          <span>{t.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </Field>
+            ) : (
+              <Field label="Responsible for Packing (Optional)">
+                <select value={responsibleId} onChange={e => setResponsibleId(e.target.value)}>
+                  <option value="">Unassigned</option>
+                  {travelers.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
+
+            <Field label="Notes (Optional)">
+              <input placeholder="e.g. Pack in carry-on" value={notes} onChange={e => setNotes(e.target.value)} />
+            </Field>
+
+            <div className="row end" style={{ paddingTop: '8px' }}>
+              <Btn onClick={() => setAddModalOpen(false)}>Cancel</Btn>
+              <Btn kind="primary" type="submit" disabled={!itemName.trim() || !catId || (!isShared && selectedTravelers.length === 0)}>
+                Add to Packing List
+              </Btn>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* --- MODAL: TARGETED DELETION --- */}
+      {deletingGroup && (
+        <Modal title={`Delete "${deletingGroup.name}"`} onClose={() => setDeletingGroup(null)}>
           <div className="stack">
-            <Field label="Name"><input value={categoryName} onChange={e => setCategoryName(e.target.value)} placeholder="e.g. Swimwear" autoFocus /></Field>
-            <div className="row end">
-              <Btn onClick={() => setNewCategory(false)}>Cancel</Btn>
-              <Btn kind="primary" disabled={!categoryName.trim()} onClick={addCategory}>Create</Btn>
+            <p className="muted" style={{ fontSize: '0.9rem' }}>Choose who to remove this item for:</p>
+
+            <div className="stack compact">
+              {deletingGroup.items.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleDeleteSingle(item)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'space-between',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    color: '#334155'
+                  }}
+                >
+                  <span>Remove for {whom(item.owner_id)}</span>
+                  <Trash2 size={16} style={{ color: '#ef4444' }} />
+                </button>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '12px' }} className="row between">
+              <Btn kind="danger-button" onClick={() => handleDeleteEveryone(deletingGroup)}>
+                <Trash2 size={16} /> Delete for Everyone
+              </Btn>
+              <Btn onClick={() => setDeletingGroup(null)}>Cancel</Btn>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* Add Bag Modal */}
-      {newBag && (
-        <Modal title="Add bag" onClose={() => setNewBag(false)}>
+      {/* --- MODAL: MANAGE CATEGORIES --- */}
+      {manageCatsOpen && (
+        <Modal title="Manage Packing Categories" onClose={() => setManageCatsOpen(false)}>
           <div className="stack">
-            <Field label="Bag name"><input value={bagName} onChange={e => setBagName(e.target.value)} placeholder="e.g. Travel Day Bag" autoFocus /></Field>
-            <div className="row end">
-              <Btn onClick={() => setNewBag(false)}>Cancel</Btn>
-              <Btn kind="primary" disabled={!bagName.trim()} onClick={addBag}>Create</Btn>
+            <div className="stack compact">
+              {cats.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#ffffff' }}>
+                  {editingCatId === c.id ? (
+                    <div style={{ display: 'flex', gap: '6px', flex: 1, marginRight: '8px' }}>
+                      <input
+                        value={editingCatName}
+                        onChange={e => setEditingCatName(e.target.value)}
+                        style={{ fontSize: '14px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #94a3b8', flex: 1 }}
+                        autoFocus
+                      />
+                      <Btn kind="primary" onClick={() => handleRenameCategory(c.id, editingCatName)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>Save</Btn>
+                      <Btn onClick={() => setEditingCatId(null)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>Cancel</Btn>
+                    </div>
+                  ) : (
+                    <span style={{ fontWeight: 600, color: '#334155' }}>{c.name}</span>
+                  )}
+
+                  {editingCatId !== c.id && (
+                    <div className="row compact">
+                      <Btn kind="ghost" onClick={() => { setEditingCatId(c.id); setEditingCatName(c.name); }} aria-label="Rename category">
+                        <Pencil size={15} />
+                      </Btn>
+                      <Btn kind="ghost" onClick={() => handleDeleteCategory(c)} aria-label="Delete category">
+                        <Trash2 size={15} style={{ color: '#ef4444' }} />
+                      </Btn>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '12px' }} className="stack compact">
+              <strong style={{ fontSize: '0.88rem', color: '#334155' }}>Add New Category</strong>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  placeholder="e.g. Swimwear, Baby Gear..."
+                  value={categoryName}
+                  onChange={e => setCategoryName(e.target.value)}
+                  style={{ fontSize: '14px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', flex: 1 }}
+                />
+                <Btn kind="primary" disabled={!categoryName.trim()} onClick={createCategory}>
+                  <Plus size={16} /> Add
+                </Btn>
+              </div>
+            </div>
+
+            <div className="row end" style={{ paddingTop: '8px' }}>
+              <Btn onClick={() => setManageCatsOpen(false)}>Done</Btn>
             </div>
           </div>
         </Modal>
