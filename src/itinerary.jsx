@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { 
   Plus, Palette, Pencil, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, 
   ArrowLeft, MoreHorizontal, MapPin, Route, CalendarPlus, Copy, Trash2, 
-  Lightbulb, Clock3, LocateFixed 
+  Lightbulb, Clock3, LocateFixed, Utensils
 } from 'lucide-react';
 import { 
   supabase, blankActivity, clock, dayBase, dayCount, dayTitle, eventSort, 
@@ -16,6 +16,20 @@ const typeOptions = [{ value: 'activity', label: 'Activity' }, { value: 'food', 
 
 const cityNames = rows => Array.from(new Set([...rows.activities.map(a => a.city_area), ...rows.stays.map(s => s.base_city)].filter(Boolean))).sort();
 const activityList = (rows, n) => rows.activities.filter(a => a.day_number === n).sort(eventSort);
+
+// Helper function to detect transport/travel events by kind or title
+function isTransportEvent(e) {
+  if (e.kind === 'transport') return true;
+  const title = (e.title || '').trim().toLowerCase();
+  return /^(head|transfer|drive|flight|train|bus|ferry|walk|ride|shinkansen|express)\b/i.test(title);
+}
+
+// Helper function to detect meal/food events
+function isFoodEvent(e) {
+  if (e.kind === 'food') return true;
+  const title = (e.title || '').trim().toLowerCase();
+  return /^(breakfast|lunch|dinner|cafe|ramen|sushi|snack|tea|food|restaurant)\b/i.test(title);
+}
 
 function TitleTimeEditor({ n, ctx, onClose }) {
   const { data, trip, refresh, toast } = ctx;
@@ -90,9 +104,13 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
   async function commit() {
     if (!title.trim() || time === false) return;
     setSaving(true);
+    const isTrans = /^(head|transfer|drive|flight|train|bus|ferry|walk|ride)\b/i.test(title.trim());
+    const isMeal = /^(breakfast|lunch|dinner|cafe|ramen|sushi|snack|tea)\b/i.test(title.trim());
+    
     const ok = await save('activities', {
       ...blankActivity,
       title: title.trim(),
+      kind: isTrans ? 'transport' : isMeal ? 'food' : 'activity',
       day_number: isIdea ? null : n,
       start_time: time,
       notes,
@@ -115,7 +133,7 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
       </Field>
 
       <Field label="Activity name">
-        <input autoFocus={isIdea} value={title} onChange={e => setTitle(e.target.value)} placeholder="Place or activity" />
+        <input autoFocus={isIdea} value={title} onChange={e => setTitle(e.target.value)} placeholder="Place or activity (e.g. Head to Enoshima, Dinner)" />
       </Field>
 
       {isIdea && (
@@ -130,7 +148,7 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
       )}
 
       <Field label="Notes (optional)">
-        <textarea rows="2" value={notes} onChange={e => setNotes(e.target.value)} />
+        <textarea rows="3" style={{ minHeight: '90px', resize: 'vertical' }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes..." />
       </Field>
 
       <div className="row end">
@@ -148,6 +166,7 @@ function ActivityEditor({ ctx, activity, onClose }) {
   const [v, setV] = useState({ 
     ...blankActivity, 
     ...activity, 
+    day_number: (activity.day_number === null || activity.day_number === undefined) ? 'ideas' : String(activity.day_number),
     start_time: activity.start_time ? clock(activity.start_time) : null 
   });
   const [saving, setSaving] = useState(false);
@@ -156,9 +175,11 @@ function ActivityEditor({ ctx, activity, onClose }) {
   async function commit() {
     if (!v.title.trim() || v.start_time === false) return;
     setSaving(true);
+    const targetDay = (v.day_number === 'ideas' || !v.day_number) ? null : Number(v.day_number);
+
     const ok = await save('activities', {
       title: v.title.trim(),
-      day_number: v.day_number === 'ideas' ? null : Number(v.day_number),
+      day_number: targetDay,
       start_time: v.start_time,
       city_area: v.city_area || '',
       kind: v.kind,
@@ -170,6 +191,7 @@ function ActivityEditor({ ctx, activity, onClose }) {
       action_needed: v.action_needed,
       notes: v.notes || ''
     }, activity.id);
+
     setSaving(false);
     if (ok) {
       onClose();
@@ -196,7 +218,7 @@ function ActivityEditor({ ctx, activity, onClose }) {
       
       <div className="form-grid">
         <Field label="Assigned Day">
-          <Select value={v.day_number === null ? 'ideas' : String(v.day_number)} onChange={x => update('day_number', x)} options={dayOptions} />
+          <Select value={v.day_number === null || v.day_number === 'ideas' ? 'ideas' : String(v.day_number)} onChange={x => update('day_number', x)} options={dayOptions} />
         </Field>
         <Field label="Start time (optional)">
           <TimeEntry value={v.start_time} onChange={x => update('start_time', x)} />
@@ -210,8 +232,8 @@ function ActivityEditor({ ctx, activity, onClose }) {
 
       {v.kind === 'transport' ? (
         <div className="form-grid">
-          <Field label="From"><input value={v.origin} onChange={e => update('origin', e.target.value)} /></Field>
-          <Field label="To"><input value={v.destination} onChange={e => update('destination', e.target.value)} /></Field>
+          <Field label="From (Origin)"><input value={v.origin} onChange={e => update('origin', e.target.value)} placeholder="e.g. Tokyo Station" /></Field>
+          <Field label="To (Destination)"><input value={v.destination} onChange={e => update('destination', e.target.value)} placeholder="e.g. Kyoto Station" /></Field>
         </div>
       ) : (
         <Field label="Place / address"><input value={v.place} onChange={e => update('place', e.target.value)} /></Field>
@@ -230,7 +252,7 @@ function ActivityEditor({ ctx, activity, onClose }) {
       </label>
 
       <Field label="Notes">
-        <textarea rows="3" value={v.notes} onChange={e => update('notes', e.target.value)} />
+        <textarea rows="4" style={{ minHeight: '100px', resize: 'vertical' }} value={v.notes} onChange={e => update('notes', e.target.value)} />
       </Field>
 
       <div className="row between align-center">
@@ -375,16 +397,45 @@ export function Overview(ctx) {
                       {editing === n && <TitleTimeEditor n={n} ctx={ctx} onClose={() => setEditing(null)} />}
 
                       <div className="overview-events">
-                        {list.map(e => (
-                          <div className="overview-event" key={e.id}>
-                            <span className="event-time">{clock(e.start_time)}</span>
-                            <div className="event-text">
-                              <span>{e.title}</span>
-                              <Status activity={e} />
+                        {list.map(e => {
+                          const isTransport = isTransportEvent(e);
+                          const isFood = isFoodEvent(e);
+
+                          return (
+                            <div 
+                              className={`overview-event ${isTransport ? 'is-transport' : ''}`} 
+                              key={e.id}
+                              style={
+                                isTransport ? {
+                                  background: '#eff6ff',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  borderLeft: '3px solid #2e5b97',
+                                  margin: '3px 0'
+                                } : isFood ? {
+                                  background: '#fffbe3',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  borderLeft: '3px solid #d97706',
+                                  margin: '2px 0'
+                                } : {}
+                              }
+                            >
+                              <span className="event-time" style={isTransport ? { color: '#1e40af', fontWeight: '700' } : isFood ? { color: '#b45309', fontWeight: '700' } : {}}>
+                                {clock(e.start_time)}
+                              </span>
+                              <div className="event-text" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {isTransport && <Route size={14} style={{ color: '#2e5b97', flexShrink: 0 }} />}
+                                {isFood && <Utensils size={13} style={{ color: '#d97706', flexShrink: 0 }} />}
+                                <span style={isTransport ? { fontWeight: '600', color: '#1e3a8a' } : isFood ? { fontWeight: '600', color: '#78350f' } : {}}>
+                                  {e.title}
+                                </span>
+                                <Status activity={e} />
+                              </div>
+                              <MapButton activity={e} />
                             </div>
-                            <MapButton activity={e} />
-                          </div>
-                        ))}
+                          );
+                        })}
                         {list.length === 0 && <span className="muted tiny">No activities yet</span>}
                       </div>
 
@@ -411,6 +462,9 @@ export function EventCard({ ctx, event }) {
   const { trip, save, remove, toast } = ctx;
   const [editor, setEditor] = useState(false);
 
+  const isTransport = isTransportEvent(event);
+  const isFood = isFoodEvent(event);
+
   async function sendIdea() {
     await save('activities', { day_number: null }, event.id);
   }
@@ -426,13 +480,34 @@ export function EventCard({ ctx, event }) {
   }
 
   return (
-    <article className="event-card">
+    <article 
+      className={`event-card ${isTransport ? 'is-transport' : ''}`}
+      style={
+        isTransport ? {
+          background: '#eff6ff',
+          borderLeft: '4px solid #2e5b97',
+          borderRadius: '8px',
+          padding: '10px 12px'
+        } : isFood ? {
+          background: '#fffbe3',
+          borderLeft: '4px solid #d97706',
+          borderRadius: '8px',
+          padding: '10px 12px'
+        } : {}
+      }
+    >
       <div className="event-main">
-        <div className="event-time strong">{clock(event.start_time)}</div>
+        <div className="event-time strong" style={isTransport ? { color: '#1e40af' } : isFood ? { color: '#b45309' } : {}}>
+          {clock(event.start_time)}
+        </div>
         
         {/* Tapping Title Opens Edit Mode Directly */}
         <button className="event-name-area" onClick={() => setEditor(v => !v)} title="Tap to edit activity">
-          <strong>{event.title}</strong>
+          <div className="row compact align-center">
+            {isTransport && <Route size={15} style={{ color: '#2e5b97', flexShrink: 0 }} />}
+            {isFood && <Utensils size={14} style={{ color: '#d97706', flexShrink: 0 }} />}
+            <strong style={isTransport ? { color: '#1e3a8a' } : isFood ? { color: '#78350f' } : {}}>{event.title}</strong>
+          </div>
           {event.city_area && <span className="muted tiny">{event.city_area}</span>}
           <Status activity={event} />
           {event.notes && <span className="event-notes">{event.notes}</span>}
@@ -448,8 +523,10 @@ export function EventCard({ ctx, event }) {
         </div>
       </div>
 
-      {event.kind === 'transport' && !editor && (
-        <div className="event-route muted tiny">{event.origin || 'Origin TBD'} → {event.destination || 'Destination TBD'}</div>
+      {isTransport && !editor && (
+        <div className="event-route muted tiny" style={{ marginTop: '4px', color: '#2e5b97', fontWeight: 600 }}>
+          🚌 {event.origin || 'Origin TBD'} → {event.destination || 'Destination TBD'}
+        </div>
       )}
 
       {editor && <ActivityEditor key={event.id} ctx={ctx} activity={event} onClose={() => setEditor(false)} />}
@@ -524,7 +601,7 @@ export function DayView(ctx) {
           </div>
           {editingNote ? (
             <div className="stack">
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows="3" />
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows="4" style={{ minHeight: '100px', resize: 'vertical' }} />
               <div className="row end">
                 <Btn onClick={() => setEditingNote(false)}>Cancel</Btn>
                 <Btn kind="primary" onClick={saveNote}>Save</Btn>
@@ -582,51 +659,55 @@ export function Ideas(ctx) {
         <Select value={city} onChange={setCity} options={[{ value: 'all', label: 'All cities' }, ...cities.map(c => ({ value: c, label: c })), { value: 'unsorted', label: 'Unsorted' }]} />
       </div>
       <div className="ideas-grid">
-        {filtered.map(a => (
-          <article key={a.id} className="card stack compact">
-            <div className="row between align-start">
-              <button className="event-name-area" onClick={() => setEditor(p => p === a.id ? null : a.id)} title="Tap to edit idea">
-                <div className="row compact">
-                  {clock(a.start_time) !== 'TBD' && <span className="muted tiny strong">{clock(a.start_time)} ·</span>}
-                  <strong>{a.title}</strong>
+        {filtered.map(a => {
+          const isTransport = isTransportEvent(a);
+          return (
+            <article key={a.id} className="card stack compact" style={isTransport ? { background: '#eff6ff', borderLeft: '3px solid #2e5b97' } : {}}>
+              <div className="row between align-start">
+                <button className="event-name-area" onClick={() => setEditor(p => p === a.id ? null : a.id)} title="Tap to edit idea">
+                  <div className="row compact align-center">
+                    {isTransport && <Route size={14} style={{ color: '#2e5b97', flexShrink: 0 }} />}
+                    {clock(a.start_time) !== 'TBD' && <span className="muted tiny strong">{clock(a.start_time)} ·</span>}
+                    <strong>{a.title}</strong>
+                  </div>
+                  {a.city_area && <div><span className="tag">{a.city_area}</span></div>}
+                </button>
+                <div className="row">
+                  <MapButton activity={a} />
+                  <ActionMenu items={[
+                    { label: 'Delete', icon: <Trash2 size={15} />, danger: true, onClick: () => { if (window.confirm(`Delete "${a.title}"?`)) remove('activities', a); } }
+                  ]} />
                 </div>
-                {a.city_area && <div><span className="tag">{a.city_area}</span></div>}
-              </button>
-              <div className="row">
-                <MapButton activity={a} />
-                <ActionMenu items={[
-                  { label: 'Delete', icon: <Trash2 size={15} />, danger: true, onClick: () => { if (window.confirm(`Delete "${a.title}"?`)) remove('activities', a); } }
-                ]} />
               </div>
-            </div>
-            <Status activity={a} />
-            {a.notes && <p className="muted small">{a.notes}</p>}
-            {editor === a.id && <ActivityEditor key={a.id} ctx={ctx} activity={a} onClose={() => setEditor(null)} />}
-            {planning === a.id ? (
-              <div className="inline-editor stack">
-                <strong>Plan this activity</strong>
-                <Field label="Day">
-                  <Select value={String(dest)} onChange={v => setDest(Number(v))} options={tripDays(trip).map(d => ({ value: String(d.n), label: `Day ${d.n} · ${dayTitle(data, d.n)}` }))} />
-                </Field>
-                <Field label="Start time (optional)"><TimeEntry value={time} onChange={setTime} /></Field>
+              <Status activity={a} />
+              {a.notes && <p className="muted small">{a.notes}</p>}
+              {editor === a.id && <ActivityEditor key={a.id} ctx={ctx} activity={a} onClose={() => setEditor(null)} />}
+              {planning === a.id ? (
+                <div className="inline-editor stack">
+                  <strong>Plan this activity</strong>
+                  <Field label="Day">
+                    <Select value={String(dest)} onChange={v => setDest(Number(v))} options={tripDays(trip).map(d => ({ value: String(d.n), label: `Day ${d.n} · ${dayTitle(data, d.n)}` }))} />
+                  </Field>
+                  <Field label="Start time (optional)"><TimeEntry value={time} onChange={setTime} /></Field>
+                  <div className="row end">
+                    <Btn onClick={() => setPlanning(null)}>Cancel</Btn>
+                    <Btn kind="primary" onClick={() => plan(a)}>Add to Day {dest}</Btn>
+                  </div>
+                </div>
+              ) : (
                 <div className="row end">
-                  <Btn onClick={() => setPlanning(null)}>Cancel</Btn>
-                  <Btn kind="primary" onClick={() => plan(a)}>Add to Day {dest}</Btn>
+                  <Btn onClick={() => {
+                    setPlanning(a.id);
+                    setDest(Math.min(dayCount(trip), a.city_area?.toLowerCase().includes('kyoto') ? 8 : a.city_area?.toLowerCase().includes('osaka') ? 12 : 1));
+                    setTime(clock(a.start_time) === 'TBD' ? null : clock(a.start_time));
+                  }}>
+                    <CalendarPlus size={15} /> Plan day
+                  </Btn>
                 </div>
-              </div>
-            ) : (
-              <div className="row end">
-                <Btn onClick={() => {
-                  setPlanning(a.id);
-                  setDest(Math.min(dayCount(trip), a.city_area?.toLowerCase().includes('kyoto') ? 8 : a.city_area?.toLowerCase().includes('osaka') ? 12 : 1));
-                  setTime(clock(a.start_time) === 'TBD' ? null : clock(a.start_time));
-                }}>
-                  <CalendarPlus size={15} /> Plan day
-                </Btn>
-              </div>
-            )}
-          </article>
-        ))}
+              )}
+            </article>
+          );
+        })}
         {filtered.length === 0 && <Empty text="No matching ideas. Add a place or change the filter." />}
       </div>
       <datalist id="known-cities">{cities.map(c => <option key={c} value={c}/>)}</datalist>
