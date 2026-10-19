@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { 
   Plus, Palette, Pencil, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, 
   ArrowLeft, MoreHorizontal, MapPin, Route, CalendarPlus, Copy, Trash2, 
-  Lightbulb, Clock3, LocateFixed, Utensils
+  Lightbulb, Clock3, LocateFixed 
 } from 'lucide-react';
 import { 
   supabase, blankActivity, clock, dayBase, dayCount, dayTitle, eventSort, 
@@ -17,18 +17,11 @@ const typeOptions = [{ value: 'activity', label: 'Activity' }, { value: 'food', 
 const cityNames = rows => Array.from(new Set([...rows.activities.map(a => a.city_area), ...rows.stays.map(s => s.base_city)].filter(Boolean))).sort();
 const activityList = (rows, n) => rows.activities.filter(a => a.day_number === n).sort(eventSort);
 
-// Helper function to detect transport/travel events by kind or title
+// Subtle helper to detect transport items
 function isTransportEvent(e) {
   if (e.kind === 'transport') return true;
   const title = (e.title || '').trim().toLowerCase();
   return /^(head|transfer|drive|flight|train|bus|ferry|walk|ride|shinkansen|express)\b/i.test(title);
-}
-
-// Helper function to detect meal/food events
-function isFoodEvent(e) {
-  if (e.kind === 'food') return true;
-  const title = (e.title || '').trim().toLowerCase();
-  return /^(breakfast|lunch|dinner|cafe|ramen|sushi|snack|tea|food|restaurant)\b/i.test(title);
 }
 
 function TitleTimeEditor({ n, ctx, onClose }) {
@@ -104,13 +97,12 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
   async function commit() {
     if (!title.trim() || time === false) return;
     setSaving(true);
-    const isTrans = /^(head|transfer|drive|flight|train|bus|ferry|walk|ride)\b/i.test(title.trim());
-    const isMeal = /^(breakfast|lunch|dinner|cafe|ramen|sushi|snack|tea)\b/i.test(title.trim());
+    const isTrans = isTransportEvent({ title });
     
     const ok = await save('activities', {
       ...blankActivity,
       title: title.trim(),
-      kind: isTrans ? 'transport' : isMeal ? 'food' : 'activity',
+      kind: isTrans ? 'transport' : 'activity',
       day_number: isIdea ? null : n,
       start_time: time,
       notes,
@@ -133,7 +125,7 @@ function QuickAdd({ n, ctx, onClose, isIdea = false }) {
       </Field>
 
       <Field label="Activity name">
-        <input autoFocus={isIdea} value={title} onChange={e => setTitle(e.target.value)} placeholder="Place or activity (e.g. Head to Enoshima, Dinner)" />
+        <input autoFocus={isIdea} value={title} onChange={e => setTitle(e.target.value)} placeholder="Place or activity (e.g. Head to Enoshima)" />
       </Field>
 
       {isIdea && (
@@ -398,36 +390,15 @@ export function Overview(ctx) {
 
                       <div className="overview-events">
                         {list.map(e => {
-                          const isTransport = isTransportEvent(e);
-                          const isFood = isFoodEvent(e);
+                          const isTrans = isTransportEvent(e);
 
                           return (
-                            <div 
-                              className={`overview-event ${isTransport ? 'is-transport' : ''}`} 
-                              key={e.id}
-                              style={
-                                isTransport ? {
-                                  background: '#eff6ff',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  borderLeft: '3px solid #2e5b97',
-                                  margin: '3px 0'
-                                } : isFood ? {
-                                  background: '#fffbe3',
-                                  padding: '3px 8px',
-                                  borderRadius: '6px',
-                                  borderLeft: '3px solid #d97706',
-                                  margin: '2px 0'
-                                } : {}
-                              }
-                            >
-                              <span className="event-time" style={isTransport ? { color: '#1e40af', fontWeight: '700' } : isFood ? { color: '#b45309', fontWeight: '700' } : {}}>
+                            <div className="overview-event" key={e.id}>
+                              <span className="event-time" style={isTrans ? { color: '#64748b' } : {}}>
                                 {clock(e.start_time)}
                               </span>
-                              <div className="event-text" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {isTransport && <Route size={14} style={{ color: '#2e5b97', flexShrink: 0 }} />}
-                                {isFood && <Utensils size={13} style={{ color: '#d97706', flexShrink: 0 }} />}
-                                <span style={isTransport ? { fontWeight: '600', color: '#1e3a8a' } : isFood ? { fontWeight: '600', color: '#78350f' } : {}}>
+                              <div className="event-text">
+                                <span style={isTrans ? { color: '#475569', fontStyle: 'italic', fontWeight: '400' } : { fontWeight: '600' }}>
                                   {e.title}
                                 </span>
                                 <Status activity={e} />
@@ -461,9 +432,7 @@ export function Overview(ctx) {
 export function EventCard({ ctx, event }) {
   const { trip, save, remove, toast } = ctx;
   const [editor, setEditor] = useState(false);
-
-  const isTransport = isTransportEvent(event);
-  const isFood = isFoodEvent(event);
+  const isTrans = isTransportEvent(event);
 
   async function sendIdea() {
     await save('activities', { day_number: null }, event.id);
@@ -480,34 +449,15 @@ export function EventCard({ ctx, event }) {
   }
 
   return (
-    <article 
-      className={`event-card ${isTransport ? 'is-transport' : ''}`}
-      style={
-        isTransport ? {
-          background: '#eff6ff',
-          borderLeft: '4px solid #2e5b97',
-          borderRadius: '8px',
-          padding: '10px 12px'
-        } : isFood ? {
-          background: '#fffbe3',
-          borderLeft: '4px solid #d97706',
-          borderRadius: '8px',
-          padding: '10px 12px'
-        } : {}
-      }
-    >
+    <article className="event-card">
       <div className="event-main">
-        <div className="event-time strong" style={isTransport ? { color: '#1e40af' } : isFood ? { color: '#b45309' } : {}}>
+        <div className="event-time strong" style={isTrans ? { color: '#64748b' } : {}}>
           {clock(event.start_time)}
         </div>
         
         {/* Tapping Title Opens Edit Mode Directly */}
         <button className="event-name-area" onClick={() => setEditor(v => !v)} title="Tap to edit activity">
-          <div className="row compact align-center">
-            {isTransport && <Route size={15} style={{ color: '#2e5b97', flexShrink: 0 }} />}
-            {isFood && <Utensils size={14} style={{ color: '#d97706', flexShrink: 0 }} />}
-            <strong style={isTransport ? { color: '#1e3a8a' } : isFood ? { color: '#78350f' } : {}}>{event.title}</strong>
-          </div>
+          <strong style={isTrans ? { color: '#475569', fontStyle: 'italic', fontWeight: '500' } : {}}>{event.title}</strong>
           {event.city_area && <span className="muted tiny">{event.city_area}</span>}
           <Status activity={event} />
           {event.notes && <span className="event-notes">{event.notes}</span>}
@@ -523,9 +473,9 @@ export function EventCard({ ctx, event }) {
         </div>
       </div>
 
-      {isTransport && !editor && (
-        <div className="event-route muted tiny" style={{ marginTop: '4px', color: '#2e5b97', fontWeight: 600 }}>
-          🚌 {event.origin || 'Origin TBD'} → {event.destination || 'Destination TBD'}
+      {isTrans && !editor && (event.origin || event.destination) && (
+        <div className="event-route muted tiny" style={{ marginTop: '2px', color: '#64748b' }}>
+          {event.origin || 'Origin TBD'} → {event.destination || 'Destination TBD'}
         </div>
       )}
 
@@ -660,15 +610,14 @@ export function Ideas(ctx) {
       </div>
       <div className="ideas-grid">
         {filtered.map(a => {
-          const isTransport = isTransportEvent(a);
+          const isTrans = isTransportEvent(a);
           return (
-            <article key={a.id} className="card stack compact" style={isTransport ? { background: '#eff6ff', borderLeft: '3px solid #2e5b97' } : {}}>
+            <article key={a.id} className="card stack compact">
               <div className="row between align-start">
                 <button className="event-name-area" onClick={() => setEditor(p => p === a.id ? null : a.id)} title="Tap to edit idea">
                   <div className="row compact align-center">
-                    {isTransport && <Route size={14} style={{ color: '#2e5b97', flexShrink: 0 }} />}
                     {clock(a.start_time) !== 'TBD' && <span className="muted tiny strong">{clock(a.start_time)} ·</span>}
-                    <strong>{a.title}</strong>
+                    <strong style={isTrans ? { color: '#475569', fontStyle: 'italic' } : {}}>{a.title}</strong>
                   </div>
                   {a.city_area && <div><span className="tag">{a.city_area}</span></div>}
                 </button>
